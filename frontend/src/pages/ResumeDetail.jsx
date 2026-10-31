@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Sparkles, ArrowLeft, Loader2, FileText, Download } from "lucide-react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { Sparkles, ArrowLeft, Loader2, FileText, Download, ClipboardPaste, Search, ChevronDown, ChevronUp, Route } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +15,8 @@ import { IssuesList } from "@/components/analysis/IssuesList";
 import { StrengthsList } from "@/components/analysis/StrengthsList";
 import { KeywordChips } from "@/components/analysis/KeywordChips";
 import { BulletRewrites } from "@/components/analysis/BulletRewrites";
+import { CompatibilityPanel } from "@/components/analysis/CompatibilityPanel";
+import { AtsImprovementPlan } from "@/components/analysis/AtsImprovementPlan";
 import { VersionSwitcher } from "@/components/resume/VersionSwitcher";
 import { DiffView } from "@/components/resume/DiffView";
 import { relativeTime } from "@/lib/utils";
@@ -23,11 +25,13 @@ import {
   useAnalysisForVersion,
   useAnalyzeResume,
   useApplyRewrites,
+  useSuggestRoles,
 } from "@/hooks/useResumes";
 
 export default function ResumeDetail() {
   const { id } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
 
   const { data, isLoading, error } = useResume(id);
   const resume = data?.resume;
@@ -50,14 +54,29 @@ export default function ResumeDetail() {
 
   const analyze = useAnalyzeResume(id);
   const applyRewrites = useApplyRewrites(id);
+  const suggestRoles = useSuggestRoles();
   const [targetRole, setTargetRole] = useState("");
+  const [jobDescription, setJobDescription] = useState(
+    location.state?.jobDescription || ""
+  );
+  const [suggestedRoles, setSuggestedRoles] = useState([]);
   const [tab, setTab] = useState("score");
+
+  useEffect(() => {
+    if (analysis?.suggestedRoles?.length) {
+      setSuggestedRoles(analysis.suggestedRoles);
+    }
+    if (analysis?.targetRole && !targetRole) {
+      setTargetRole(analysis.targetRole);
+    }
+  }, [analysis, targetRole]);
 
   async function runAnalyze() {
     try {
       await analyze.mutateAsync({
         versionId: activeVersionId,
         targetRole: targetRole.trim() || undefined,
+        jobDescription: jobDescription.trim() || undefined,
       });
     } catch {
       /* surfaced below */
@@ -65,11 +84,12 @@ export default function ResumeDetail() {
   }
 
   async function runApplyRewrites(rewriteIds) {
-    if (!analysis?._id) return;
+    if (!analysis?._id || applyRewrites.isPending || analyze.isPending) return;
     try {
       const res = await applyRewrites.mutateAsync({
         analysisId: analysis._id,
         rewriteIds: rewriteIds.length ? rewriteIds : undefined,
+        targetRole: targetRole.trim() || undefined,
       });
       if (res?.version?._id) {
         const newVersionId = res.version._id;
@@ -81,13 +101,28 @@ export default function ResumeDetail() {
           await analyze.mutateAsync({
             versionId: newVersionId,
             targetRole: targetRole.trim() || undefined,
+            jobDescription: jobDescription.trim() || undefined,
           });
         } catch {
           /* surfaced via analyze.error inside the Run analysis card */
         }
+
       }
     } catch {
       /* surfaced inside the card */
+    }
+  }
+
+  async function runSuggestRoles() {
+    if (jobDescription.trim().length < 20) return;
+    try {
+      const result = await suggestRoles.mutateAsync(jobDescription.trim());
+      setSuggestedRoles(result.roles || []);
+      if (result.roles?.[0] && !targetRole.trim()) {
+        setTargetRole(result.roles[0]);
+      }
+    } catch {
+      /* surfaced by the mutation toast */
     }
   }
 
@@ -131,6 +166,12 @@ export default function ResumeDetail() {
             <Button variant="ghost" onClick={() => nav("/resumes")}>
               <ArrowLeft size={14} /> All resumes
             </Button>
+            <Button variant="outline" onClick={() => nav(`/resumes/${id}/keyword-intelligence`)}>
+              <Search size={14} /> Keyword intelligence
+            </Button>
+            <Button variant="accent" onClick={() => nav(`/resumes/${id}/roadmap`)}>
+              <Route size={14} /> Build My Career Roadmap
+            </Button>
             <Button
               variant="outline"
               onClick={() => nav(`/resumes/${id}/export`)}
@@ -154,29 +195,84 @@ export default function ResumeDetail() {
               onChange={setActiveVersionId}
             />
           </div>
-          <div className="flex items-center gap-3 flex-1 min-w-[280px] max-w-[520px]">
+          <div className="flex flex-col gap-3 flex-1 min-w-[280px] max-w-[620px]">
             <Input
               placeholder="Target role (optional, e.g. Senior Frontend Engineer)"
               value={targetRole}
               onChange={(e) => setTargetRole(e.target.value)}
             />
-            <Button
-              variant="accent"
-              size="lg"
-              onClick={runAnalyze}
-              disabled={analyze.isPending || !activeVersionId}
-              className="shrink-0"
-            >
-              {analyze.isPending ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> Analyzing…
-                </>
-              ) : (
-                <>
-                  <Sparkles size={14} /> Analyze
-                </>
+            <textarea
+              className="min-h-28 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] resize-y"
+              placeholder="Paste the complete job description (optional). The analysis will match keywords and rewrite only facts supported by your CV."
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              maxLength={12000}
+              aria-label="Job description"
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={runSuggestRoles}
+                disabled={suggestRoles.isPending || jobDescription.trim().length < 20}
+              >
+                {suggestRoles.isPending ? (
+                  <><Loader2 size={13} className="animate-spin" /> Finding roles…</>
+                ) : (
+                  "Suggest technical roles"
+                )}
+              </Button>
+              {suggestedRoles.map((role) => (
+                <button
+                  type="button"
+                  key={role}
+                  onClick={() => setTargetRole(role)}
+                  className={`rounded-full border px-3 py-1 text-xs transition ${
+                    targetRole === role
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                      : "border-[var(--border)] text-[var(--ink-muted)] hover:border-[var(--accent)]"
+                  }`}
+                >
+                  {role}
+                </button>
+              ))}
+              {targetRole.trim() && analysis?._id && (
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onClick={() => runApplyRewrites([])}
+                  disabled={applyRewrites.isPending}
+                >
+                  {applyRewrites.isPending ? (
+                    <><Loader2 size={13} className="animate-spin" /> Creating version…</>
+                  ) : (
+                    "Create tailored PDF version"
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-[var(--ink-muted)] flex items-center gap-1">
+                <ClipboardPaste size={13} /> Originality-safe wording; no invented experience
+              </span>
+              <Button
+                variant="accent"
+                size="lg"
+                onClick={runAnalyze}
+                disabled={analyze.isPending || !activeVersionId}
+                className="shrink-0"
+              >
+                {analyze.isPending ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Analyzing…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} /> Analyze
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
         {analyze.error && (
@@ -208,7 +304,10 @@ export default function ResumeDetail() {
               <AtsGauge score={analysis.atsScore} delta={0} />
             </div>
             <div className="lg:col-span-5">
-              <ScoreBreakdown breakdown={analysis.scoreBreakdown} />
+              <ScoreBreakdown
+                breakdown={analysis.scoreBreakdown}
+                compatibilityBreakdown={analysis.compatibilityBreakdown}
+              />
             </div>
             <div className="lg:col-span-3">
               <Card className="h-full flex flex-col">
@@ -228,12 +327,24 @@ export default function ResumeDetail() {
             </div>
           </div>
 
+          <AtsImprovementPlan
+            analysis={analysis}
+            onOpenIssues={() => setTab("score")}
+            onAnalyze={runAnalyze}
+          />
+
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
               <TabsTrigger value="score">Issues</TabsTrigger>
               <TabsTrigger value="strengths">Strengths</TabsTrigger>
               <TabsTrigger value="keywords">Keywords</TabsTrigger>
               <TabsTrigger value="rewrites">Rewrites</TabsTrigger>
+              {analysis.compatibilityBreakdown && (
+                <TabsTrigger value="compatibility">Job compatibility</TabsTrigger>
+              )}
+              {analysis?.originalityIssues?.length > 0 && (
+                <TabsTrigger value="originality">Originality</TabsTrigger>
+              )}
               {versions.length >= 2 && (
                 <TabsTrigger value="diff">Diff</TabsTrigger>
               )}
@@ -260,6 +371,39 @@ export default function ResumeDetail() {
                   error={applyRewrites.error?.message}
                 />
               </TabsContent>
+              {analysis.compatibilityBreakdown && (
+                <TabsContent value="compatibility">
+                  <CompatibilityPanel
+                    breakdown={analysis.compatibilityBreakdown}
+                    matches={analysis.keywordMatches}
+                    recommendations={analysis.improvementRecommendations}
+                    rubricVersion={analysis.scoringRubricVersion}
+                  />
+                </TabsContent>
+              )}
+              {analysis.originalityIssues?.length > 0 && (
+                <TabsContent value="originality">
+                  <Card>
+                    <CardHeader>
+                      <div>
+                        <CardTitle className="text-base">Originality wording check</CardTitle>
+                        <CardDescription className="mt-1">
+                          These are generic or potentially copied-sounding phrases, not an internet plagiarism verdict.
+                        </CardDescription>
+                      </div>
+                    </CardHeader>
+                    <div className="space-y-3">
+                      {analysis.originalityIssues.map((issue, index) => (
+                        <div key={`${issue.phrase}-${index}`} className="rounded-2xl border border-[var(--border)] p-4">
+                          <div className="text-sm font-medium text-[var(--ink)]">“{issue.phrase}”</div>
+                          <div className="mt-1 text-xs text-[var(--ink-muted)]">{issue.reason}</div>
+                          <div className="mt-2 text-sm text-[var(--accent-strong)]">{issue.suggestion}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                </TabsContent>
+              )}
               <TabsContent value="diff">
                 <DiffView resumeId={id} versions={versions} />
               </TabsContent>
@@ -285,17 +429,22 @@ export default function ResumeDetail() {
   );
 }
 
-function PreviewLabel({ children }) {
-  return (
-    <div className="text-[10px] uppercase tracking-wide text-[var(--ink-muted)] mb-1.5">
-      {children}
-    </div>
-  );
-}
-
 function ParsedSectionsPreview({ version }) {
   const s = version.parsedSections || {};
   const b = s.basics || {};
+  const [expanded, setExpanded] = useState({});
+  const [showRaw, setShowRaw] = useState(false);
+  const sections = [
+    ["summary", "Professional Summary", s.summary],
+    ["experience", "Work Experience", s.experience],
+    ["projects", "Projects", s.projects],
+    ["education", "Education", s.education],
+    ["skills", "Technical Skills", s.skills],
+    ["certifications", "Certifications", s.certifications],
+    ["languages", "Languages", s.languages],
+    ["interests", "Additional Information", s.interests],
+  ].filter(([, , value]) => Array.isArray(value) ? value.length > 0 : Boolean(value?.trim?.() || value));
+  const toggle = (key) => setExpanded((current) => ({ ...current, [key]: !current[key] }));
 
   return (
     <div className="space-y-4 text-sm">
@@ -320,115 +469,45 @@ function ParsedSectionsPreview({ version }) {
         </div>
       )}
 
-      {s.summary && (
-        <div>
-          <PreviewLabel>Summary</PreviewLabel>
-          <p className="text-[var(--ink)] leading-relaxed">{s.summary}</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {s.experience?.length > 0 && (
-          <div>
-            <PreviewLabel>Experience ({s.experience.length})</PreviewLabel>
-            <ul className="space-y-1.5">
-              {s.experience.slice(0, 5).map((e, i) => (
-                <li key={i}>
-                  <span className="text-[var(--ink)] font-medium">{e.role}</span>
-                  {e.company && (
-                    <span className="text-[var(--ink-muted)]"> · {e.company}</span>
-                  )}
-                  {e.period && (
-                    <span className="ml-2 text-[11px] text-[var(--ink-muted)]">
-                      {e.period}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {s.education?.length > 0 && (
-          <div>
-            <PreviewLabel>Education ({s.education.length})</PreviewLabel>
-            <ul className="space-y-1.5">
-              {s.education.map((e, i) => (
-                <li key={i}>
-                  <span className="text-[var(--ink)] font-medium">{e.degree}</span>
-                  {e.school && (
-                    <span className="text-[var(--ink-muted)]"> · {e.school}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      {s.skills?.length > 0 && (
-        <div>
-          <PreviewLabel>Skills ({s.skills.length})</PreviewLabel>
-          <div className="flex flex-wrap gap-1.5">
-            {s.skills.slice(0, 24).map((sk, i) => (
-              <Badge key={i} tone="accent">{sk}</Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {s.projects?.length > 0 && (
-        <div>
-          <PreviewLabel>Projects ({s.projects.length})</PreviewLabel>
-          <ul className="space-y-1.5">
-            {s.projects.slice(0, 5).map((p, i) => (
-              <li key={i}>
-                <span className="text-[var(--ink)] font-medium">{p.name}</span>
-                {p.tech?.length > 0 && (
-                  <span className="ml-2 text-[11px] text-[var(--accent-strong)]">
-                    {p.tech.join(" · ")}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {s.certifications?.length > 0 && (
-          <div>
-            <PreviewLabel>Certifications</PreviewLabel>
-            <ul className="space-y-1 text-xs text-[var(--ink-muted)]">
-              {s.certifications.map((c, i) => (
-                <li key={i}>
-                  <span className="text-[var(--ink)]">{c.name}</span>
-                  {c.year && <span> · {c.year}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-        {s.languages?.length > 0 && (
-          <div>
-            <PreviewLabel>Languages</PreviewLabel>
-            <div className="flex flex-wrap gap-1">
-              {s.languages.map((l, i) => (
-                <Badge key={i} tone="neutral">{l}</Badge>
-              ))}
+      {sections.length > 0 ? (
+        <div className="space-y-2">
+          <div className="text-[11px] text-[var(--ink-muted)]">{sections.length} structured section{sections.length === 1 ? "" : "s"} detected</div>
+          {sections.map(([key, title, value]) => (
+            <div key={key} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] overflow-hidden">
+              <button type="button" onClick={() => toggle(key)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+                <span className="font-medium text-[var(--ink)]">{title}</span>
+                {expanded[key] ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </button>
+              {expanded[key] && <div className="border-t border-[var(--border)] px-4 py-4"><SectionContent type={key} value={value} /></div>}
             </div>
-          </div>
-        )}
-        {s.interests?.length > 0 && (
-          <div>
-            <PreviewLabel>Interests</PreviewLabel>
-            <div className="flex flex-wrap gap-1">
-              {s.interests.map((l, i) => (
-                <Badge key={i} tone="neutral">{l}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-[var(--border)] p-5 text-sm text-[var(--ink-muted)]">
+          No structured resume sections were detected. View the extracted text or try uploading a clearer PDF.
+        </div>
+      )}
+
+      {version.rawText && (
+        <div className="rounded-2xl border border-[var(--border)]">
+          <button type="button" onClick={() => setShowRaw((value) => !value)} className="flex w-full items-center justify-between px-4 py-3 text-left">
+            <span className="font-medium text-[var(--ink)]">Full Extracted Resume Text</span>
+            {showRaw ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
+          {showRaw && <pre className="max-h-[480px] overflow-auto whitespace-pre-wrap border-t border-[var(--border)] px-4 py-4 text-xs leading-5 text-[var(--ink-muted)]">{version.rawText}</pre>}
+        </div>
+      )}
     </div>
   );
+}
+
+function SectionContent({ type, value }) {
+  if (type === "summary") return <p className="whitespace-pre-wrap leading-6 text-[var(--ink)]">{value}</p>;
+  if (type === "skills" || type === "languages" || type === "interests") {
+    return <div className="flex flex-wrap gap-1.5">{value.map((item, index) => <Badge key={index} tone={type === "skills" ? "accent" : "neutral"}>{item}</Badge>)}</div>;
+  }
+  if (type === "experience") return <div className="space-y-4">{value.map((item, index) => <div key={index}><div className="font-medium text-[var(--ink)]">{item.role || item.company || "Experience"}</div><div className="text-xs text-[var(--ink-muted)]">{[item.company, item.period, item.location].filter(Boolean).join(" · ")}</div><ul className="mt-2 list-disc space-y-1 pl-5 text-[var(--ink)]">{(item.bullets || []).map((bullet, bulletIndex) => <li key={bulletIndex}>{bullet}</li>)}</ul></div>)}</div>;
+  if (type === "projects") return <div className="space-y-4">{value.map((item, index) => <div key={index}><div className="font-medium text-[var(--ink)]">{item.name || "Project"}</div>{item.tech?.length > 0 && <div className="mt-1 text-xs text-[var(--accent-strong)]">{item.tech.join(" · ")}</div>}<p className="mt-2 whitespace-pre-wrap leading-5 text-[var(--ink)]">{item.description}</p></div>)}</div>;
+  if (type === "education") return <div className="space-y-3">{value.map((item, index) => <div key={index}><div className="font-medium text-[var(--ink)]">{item.degree || item.fieldOfStudy || "Education"}</div><div className="text-xs text-[var(--ink-muted)]">{[item.institution, item.period, item.location].filter(Boolean).join(" · ")}</div>{item.bullets?.length > 0 && <ul className="mt-2 list-disc pl-5 text-[var(--ink)]">{item.bullets.map((bullet, bulletIndex) => <li key={bulletIndex}>{bullet}</li>)}</ul>}</div>)}</div>;
+  return <ul className="list-disc space-y-1 pl-5 text-[var(--ink)]">{value.map((item, index) => <li key={index}>{typeof item === "string" ? item : item.name}</li>)}</ul>;
 }

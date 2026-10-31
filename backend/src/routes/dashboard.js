@@ -39,24 +39,23 @@ router.get(
                 .sort({ versionNumber: 1 })
                 .lean();
 
-            const analysisIds = versions.map((v) => v.latestAnalysisId).filter(Boolean);
-            const analyses = analysisIds.length
-                ? await Analysis.find({ _id: { $in: analysisIds } })
-                    .select("_id atsScore versionId createdAt")
-                    .lean()
-                : [];
-            const scoreByVersion = new Map(
-                analyses.map((a) => [a.versionId.toString(), a.atsScore])
-            );
-
-            const versionsWithScores = versions.map((v) => ({
-                id: v._id,
-                label: v.label,
-                versionNumber: v.versionNumber,
-                sourceType: v.sourceType,
-                createdAt: v.createdAt,
-                score: scoreByVersion.get(v._id.toString()) ?? null,
-            }));
+            const analyses = await Analysis.find({ resumeId: latestResumeMeta._id })
+                .select("_id atsScore scoreBreakdown keywordsPresent keywordsMissing issues bulletRewrites targetRole jobDescription versionId createdAt")
+                .sort({ createdAt: 1 })
+                .lean();
+            const versionById = new Map(versions.map((v) => [v._id.toString(), v]));
+            const versionsWithScores = analyses.map((analysis) => {
+                const version = versionById.get(analysis.versionId.toString());
+                return {
+                    id: version?._id || analysis.versionId,
+                    analysisId: analysis._id,
+                    label: version?.label || `Analysis ${analysis.createdAt.toISOString().slice(0, 10)}`,
+                    versionNumber: version?.versionNumber || 0,
+                    sourceType: version?.sourceType || "upload",
+                    createdAt: version?.createdAt || analysis.createdAt,
+                    analysis,
+                };
+            });
 
             latestResume = {
                 id: latestResumeMeta._id,
@@ -67,19 +66,77 @@ router.get(
             };
 
             scoreSeries = versionsWithScores
-                .filter((v) => v.score != null)
-                .map((v) => ({
-                    label: v.label,
-                    score: v.score,
-                    versionId: v.id,
-                    at: v.createdAt,
-                }));
+                .filter((v) => v.analysis)
+                .map((v, index, series) => {
+                    const analysis = v.analysis;
+                    const previous = [...series]
+                        .slice(0, index)
+                        .reverse()
+                        .find((item) => item.analysis);
+                    const present = analysis.keywordsPresent?.length || 0;
+                    const missing = analysis.keywordsMissing?.length || 0;
+                    const keywordCoverage = present + missing
+                        ? Math.round((present / (present + missing)) * 100)
+                        : null;
+                    const breakdown = analysis.scoreBreakdown || {};
+                    const resumeQuality = ["formatting", "impact", "clarity"].every(
+                        (key) => breakdown[key] != null
+                    )
+                        ? Math.round(
+                            ((breakdown.formatting + breakdown.impact + breakdown.clarity) / 75) * 100
+                        )
+                        : null;
+                    const scoreChange = previous?.analysis
+                        ? analysis.atsScore - previous.analysis.atsScore
+                        : null;
+                    return {
+                        label: v.label,
+                        versionNumber: v.versionNumber,
+                        pointId: v.analysisId || `${v.id}-${index}`,
+                        versionId: v.id,
+                        analysisId: v.analysisId,
+                        at: analysis.createdAt || v.createdAt,
+                        atsScore: analysis.atsScore,
+                        score: analysis.atsScore,
+                        keywordCoverage,
+                        resumeQuality,
+                        contentImpact: breakdown.impact != null ? breakdown.impact * 4 : null,
+                        radar: {
+                            keywordOptimization: breakdown.keywords != null ? breakdown.keywords * 4 : null,
+                            formatting: breakdown.formatting != null ? breakdown.formatting * 4 : null,
+                            contentImpact: breakdown.impact != null ? breakdown.impact * 4 : null,
+                            clarity: breakdown.clarity != null ? breakdown.clarity * 4 : null,
+                            jobRelevance:
+                                (analysis.targetRole || analysis.jobDescription) && breakdown.keywords != null
+                                    ? breakdown.keywords * 4
+                                    : null,
+                        },
+                        scoreChange,
+                        previousScore: previous?.analysis?.atsScore ?? null,
+                        improvements: [
+                            scoreChange != null && scoreChange !== 0
+                                ? `ATS score ${scoreChange > 0 ? "+" : ""}${scoreChange} points`
+                                : null,
+                            present > (previous?.analysis?.keywordsPresent?.length || 0)
+                                ? `${present - (previous?.analysis?.keywordsPresent?.length || 0)} more keywords matched`
+                                : null,
+                            v.sourceType === "rewrite" ? "AI rewrite created" : null,
+                        ].filter(Boolean),
+                        keywordsPresent: analysis.keywordsPresent || [],
+                        keywordsMissing: analysis.keywordsMissing || [],
+                        issues: analysis.issues || [],
+                        bulletRewrites: analysis.bulletRewrites || [],
+                        sourceType: v.sourceType,
+                    };
+                });
 
             const last3 = versionsWithScores.slice(-3);
             versionStack = last3.map((v, i, arr) => {
                 const prev = arr[i - 1];
                 const delta =
-                    v.score != null && prev?.score != null ? v.score - prev.score : 0;
+                    v.analysis?.atsScore != null && prev?.analysis?.atsScore != null
+                        ? v.analysis.atsScore - prev.analysis.atsScore
+                        : 0;
                 return {
                     id: v.id,
                     label: v.label,
@@ -89,7 +146,7 @@ router.get(
                             : v.sourceType === "rewrite"
                                 ? "Rewrite pass"
                                 : v.label,
-                    score: v.score ?? 0,
+                    score: v.analysis?.atsScore ?? 0,
                     delta,
                 };
             });
@@ -97,12 +154,18 @@ router.get(
 
         // KPIs derived from history
         const allAnalyses = await Analysis.find({ userId })
-            .select("atsScore keywordsPresent keywordsMissing issues createdAt resumeId")
+            .select("atsScore keywordsPresent keywordsMissing issues bulletRewrites summary createdAt resumeId")
             .sort({ createdAt: 1 })
             .lean();
 
         const latestAnalysis = allAnalyses[allAnalyses.length - 1] || null;
         const prevAnalysis = allAnalyses[allAnalyses.length - 2] || null;
+        const keywordTotal =
+            (latestAnalysis?.keywordsPresent?.length || 0) +
+            (latestAnalysis?.keywordsMissing?.length || 0);
+        const keywordReadiness = keywordTotal
+            ? Math.round(((latestAnalysis?.keywordsPresent?.length || 0) / keywordTotal) * 100)
+            : null;
 
         const scoreSpark = allAnalyses.slice(-10).map((a) => ({ v: a.atsScore }));
         const versionsSpark = resumes
@@ -141,10 +204,7 @@ router.get(
             },
             keywordsMatched: {
                 value: latestAnalysis ? latestAnalysis.keywordsPresent?.length || 0 : null,
-                total: latestAnalysis
-                    ? (latestAnalysis.keywordsPresent?.length || 0) +
-                    (latestAnalysis.keywordsMissing?.length || 0)
-                    : null,
+                total: latestAnalysis ? keywordTotal : null,
                 delta:
                     latestAnalysis && prevAnalysis
                         ? (latestAnalysis.keywordsPresent?.length || 0) -
@@ -153,6 +213,13 @@ router.get(
                 spark: keywordsSpark,
             },
         };
+
+        const readinessSignals = [latestAnalysis?.atsScore, keywordReadiness].filter(
+            (value) => value != null
+        );
+        const careerReadiness = readinessSignals.length
+            ? Math.round(readinessSignals.reduce((sum, value) => sum + value, 0) / readinessSignals.length)
+            : null;
 
         const resumeMap = new Map(resumes.map((r) => [r._id.toString(), r]));
 
@@ -225,6 +292,18 @@ router.get(
             scoreSeries,
             versionStack,
             kpi,
+            careerReadiness,
+            latestAnalysis: latestAnalysis
+                ? {
+                    atsScore: latestAnalysis.atsScore,
+                    keywordsPresent: latestAnalysis.keywordsPresent || [],
+                    keywordsMissing: latestAnalysis.keywordsMissing || [],
+                    issues: latestAnalysis.issues || [],
+                    bulletRewrites: latestAnalysis.bulletRewrites || [],
+                    summary: latestAnalysis.summary || "",
+                    createdAt: latestAnalysis.createdAt,
+                }
+                : null,
             activity,
         });
     })

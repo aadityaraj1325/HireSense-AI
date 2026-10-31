@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Play, Sparkles, ShieldCheck } from "lucide-react";
 import { DarkPanel } from "./DarkPanel";
 import { HeroDashboardPreview } from "./HeroDashboardPreview";
+import { MotionCareerBackdrop } from "./MotionCareerBackdrop";
 
 export function HeroSection() {
   return (
@@ -11,6 +12,7 @@ export function HeroSection() {
         className="w-full min-h-[760px] lg:min-h-[820px]"
         radius="rounded-b-[40px] sm:rounded-b-[56px]"
       >
+        <MotionCareerBackdrop />
         <div
           className="grid grid-cols-1 lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-10 items-center px-6 sm:px-10 lg:px-16 pt-32 sm:pt-36 lg:pt-40 pb-16 lg:pb-24"
           style={{ maxWidth: 1280, marginLeft: "auto", marginRight: "auto" }}

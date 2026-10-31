@@ -13,13 +13,23 @@ const ResumeVersion = require("../models/ResumeVersion");
 
 const { analyzeLimiter } = require('../middleware/rateLimit');
 const Analysis = require("../models/Analysis");
-const { analyzeResume } = require("../services/geminiService");
+const { analyzeResume, suggestRoles, extractJobRequirements } = require("../services/geminiService");
+const { calculateCompatibility } = require("../services/atsEngine");
+const { sumBreakdown } = require("../services/scoreService");
 
 const { diffText, summarize } = require("../services/diffService");
+const {
+    applyRewritesToText,
+    patchTargetRole,
+    patchBulletsInSections,
+    looksEmpty,
+    locateRewrite,
+} = require("../services/rewriteService");
 
 
 const { extractText } = require("../services/pdfService");
 const { parseResume: parseStructured } = require("../services/structuredParser");
+const env = require("../config/env");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -52,6 +62,12 @@ router.post(
     asyncHandler(async (req, res) => {
         const { text, meta } = await extractText(req.file.buffer);
         const parsedSections = await parseStructured(text);
+        if (!env.isProd) {
+            const detectedSections = Object.entries(parsedSections)
+                .filter(([, value]) => Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.values(value).some(Boolean) : Boolean(value))
+                .map(([key]) => key);
+            console.log(`[resume upload] extracted ${text.length} characters; sections: ${detectedSections.join(", ") || "none"}`);
+        }
 
         const title =
             (req.body.title || "").trim() ||
@@ -100,7 +116,6 @@ router.get(
         const resume = await loadOwnedResume(req);
         const versions = await ResumeVersion.find({ resumeId: resume._id })
             .sort({ versionNumber: 1 })
-            .select("-rawText")
             .lean();
         res.json({ resume, versions });
     })
@@ -136,7 +151,21 @@ router.delete(
 const analyzeBody = z.object({
     versionId: objectIdSchema.optional(),
     targetRole: z.string().trim().max(120).optional(),
+    jobDescription: z.string().trim().max(12000).optional(),
 });
+
+const suggestRolesBody = z.object({
+    jobDescription: z.string().trim().min(20).max(12000),
+});
+
+router.post(
+    "/suggest-roles",
+    validate(suggestRolesBody),
+    asyncHandler(async (req, res) => {
+        const roles = await suggestRoles(req.body.jobDescription);
+        res.json({ roles });
+    })
+);
 
 // Analyze resume / version
 router.post(
@@ -154,23 +183,64 @@ router.post(
             await analyzeResume({
                 rawText: version.rawText,
                 targetRole: req.body.targetRole,
+                jobDescription: req.body.jobDescription,
             });
+
+        let compatibility = null;
+        let requirementsModel = null;
+        let requirementsTokens = 0;
+        if (req.body.jobDescription?.trim()) {
+            const extracted = await extractJobRequirements(req.body.jobDescription);
+            compatibility = calculateCompatibility({
+                parsedSections: version.parsedSections,
+                rawText: version.rawText,
+                jobRequirements: extracted.requirements,
+                jobDescription: req.body.jobDescription,
+            });
+            requirementsModel = extracted.model;
+            requirementsTokens = extracted.promptTokens + extracted.responseTokens;
+        }
 
         const saved = await Analysis.create({
             userId: req.user._id,
             resumeId: resume._id,
             versionId: version._id,
-            atsScore: analysis.atsScore,
+            atsScore: compatibility?.score ?? sumBreakdown(analysis.scoreBreakdown),
             scoreBreakdown: analysis.scoreBreakdown,
             issues: analysis.issues,
             strengths: analysis.strengths,
-            bulletRewrites: analysis.bulletRewrites,
+            bulletRewrites: analysis.bulletRewrites.map((rewrite) => {
+                const anchor = locateRewrite(rewrite, version.parsedSections);
+                return {
+                    ...rewrite,
+                    resumeId: resume._id,
+                    sourceVersionId: version._id,
+                    fieldPath: anchor?.fieldPath,
+                    originalFingerprint: anchor?.fingerprint,
+                    requiresConfirmation: false,
+                };
+            }),
             keywordsPresent: analysis.keywordsPresent,
             keywordsMissing: analysis.keywordsMissing,
             summary: analysis.summary,
+            targetRole: req.body.targetRole || "",
+            jobDescription: req.body.jobDescription || "",
+            originalityIssues: analysis.originalityIssues,
+            suggestedRoles: analysis.suggestedRoles,
             model,
             promptTokens,
             responseTokens,
+            scoringRubricVersion: compatibility?.rubricVersion || "",
+            atsScoreSource: compatibility ? "deterministic" : "gemini",
+            jobRequirements: compatibility ? {
+                ...compatibility.jobRequirements,
+                model: requirementsModel,
+                tokens: requirementsTokens,
+            } : null,
+            compatibilityBreakdown: compatibility?.breakdown || null,
+            keywordMatches: compatibility?.keywordMatches || [],
+            missingRequirements: compatibility?.missingRequirements || [],
+            improvementRecommendations: compatibility?.recommendations || [],
         });
 
         version.latestAnalysisId = saved._id;
@@ -190,6 +260,29 @@ router.get(
             .sort({ createdAt: -1 })
             .lean();
         res.json({ analyses });
+    })
+);
+
+router.get(
+    "/:id/keyword-intelligence",
+    validate(idParam, "params"),
+    validate(z.object({ versionId: objectIdSchema.optional() }), "query"),
+    asyncHandler(async (req, res) => {
+        const resume = await loadOwnedResume(req);
+        const versionId = req.query.versionId || resume.currentVersionId;
+        if (!versionId) {
+            return res.json({ analysis: null, matches: [], recommendations: [] });
+        }
+        await loadVersion(resume._id, versionId);
+        const analysis = await Analysis.findOne({
+            resumeId: resume._id,
+            versionId,
+        }).sort({ createdAt: -1 }).lean();
+        res.json({
+            analysis,
+            matches: analysis?.keywordMatches || [],
+            recommendations: analysis?.improvementRecommendations || [],
+        });
     })
 );
 
@@ -217,48 +310,8 @@ const rewriteBody = z.object({
     analysisId: objectIdSchema,
     rewriteIds: z.array(objectIdSchema).optional(),
     label: z.string().trim().max(40).optional(),
+    targetRole: z.string().trim().max(120).optional(),
 });
-
-function applyRewritesToText(rawText, rewrites) {
-    let result = rawText;
-    for (const r of rewrites) {
-        if (!r.original || !r.rewritten) continue;
-        const idx = result.indexOf(r.original);
-        if (idx >= 0) {
-            result = result.slice(0, idx) + r.rewritten + result.slice(idx + r.original.length);
-        } else {
-            result += `\n${r.rewritten}`;
-        }
-    }
-    return result;
-}
-
-function patchBulletsInSections(sections, rewrites) {
-    if (!sections) return null;
-    const cloned = JSON.parse(JSON.stringify(sections));
-    for (const r of rewrites) {
-        if (!r?.original || !r?.rewritten) continue;
-        for (const exp of cloned.experience || []) {
-            if (!Array.isArray(exp.bullets)) continue;
-            exp.bullets = exp.bullets.map((b) =>
-                b === r.original ? r.rewritten : b
-            );
-        }
-    }
-    return cloned;
-}
-
-function looksEmpty(sections) {
-    if (!sections) return true;
-    const b = sections.basics || {};
-    const hasIdentity = b.name || b.email || b.title;
-    const hasBody =
-        sections.summary ||
-        sections.experience?.length ||
-        sections.education?.length ||
-        sections.skills?.length;
-    return !hasIdentity && !hasBody;
-}
 
 // Rewrite resume based on selected analysis bullet rewrites
 router.post(
@@ -281,26 +334,56 @@ router.post(
                 req.body.rewriteIds.includes(r._id.toString())
             )
             : analysis.bulletRewrites;
-
-        if (!selected.length) {
-            throw ApiError.badRequest("No rewrites selected to apply");
+        const uniqueSelected = [...new Map(
+            selected.map((rewrite) => [`${rewrite.original}\u0000${rewrite.rewritten}`, rewrite])
+        ).values()];
+        const staleSuggestion = uniqueSelected.find(
+            (rewrite) => rewrite.sourceVersionId &&
+                rewrite.sourceVersionId.toString() !== baseVersion._id.toString()
+        );
+        if (staleSuggestion) {
+            throw ApiError.conflict("These suggestions belong to a different resume version", {
+                code: "RESUME_VERSION_CONFLICT",
+                rewriteId: staleSuggestion._id,
+                sourceVersionId: staleSuggestion.sourceVersionId,
+                currentVersionId: baseVersion._id,
+            });
         }
 
-        const newRaw = applyRewritesToText(baseVersion.rawText, selected);
+        if (!uniqueSelected.length && !req.body.targetRole?.trim() && !analysis.targetRole?.trim()) {
+            throw ApiError.badRequest("Choose a role or select at least one rewrite");
+        }
+
+        const rewriteResult = applyRewritesToText(
+            baseVersion.rawText,
+            uniqueSelected,
+            baseVersion.parsedSections
+        );
+        const newRaw = rewriteResult.text;
 
         const patchedFromBase = patchBulletsInSections(
             baseVersion.parsedSections,
-            selected
+            uniqueSelected
         );
         const reparsed = await parseStructured(newRaw);
-        const finalParsed = looksEmpty(reparsed) ? patchedFromBase : reparsed;
+        const requestedRole = req.body.targetRole?.trim() || analysis.targetRole;
+        const finalParsed = patchTargetRole(
+            looksEmpty(reparsed)
+                ? patchedFromBase
+                : patchBulletsInSections(reparsed, uniqueSelected),
+            requestedRole
+        );
+        if (looksEmpty(finalParsed) || !newRaw.trim()) {
+            throw ApiError.badRequest("The rewritten resume is empty or could not be parsed.");
+        }
 
         const nextNumber = resume.latestVersionNumber + 1;
 
         const newVersion = await ResumeVersion.create({
             resumeId: resume._id,
             versionNumber: nextNumber,
-            label: req.body.label?.trim() || `V${nextNumber}`,
+            label: req.body.label?.trim() ||
+                (requestedRole ? `${requestedRole} · V${nextNumber}` : `V${nextNumber}`),
             rawText: newRaw,
             parsedSections: finalParsed,
             sourceType: "rewrite",
@@ -313,7 +396,8 @@ router.post(
 
         res.status(201).json({
             version: newVersion,
-            appliedCount: selected.length,
+            appliedCount: uniqueSelected.length,
+            applied: rewriteResult.applied,
         });
     })
 );

@@ -9,6 +9,8 @@ function errorHandler(err, req, res, _next) {
     let status = err.statusCode || 500;
     let message = err.message || "Internal server error";
     let details = err.details;
+    let code = err.code;
+    let stage = err.stage;
 
     if (err.name === "ValidationError" && err.errors) {
         status = 400;
@@ -28,6 +30,7 @@ function errorHandler(err, req, res, _next) {
         message = "Validation failed";
         details = err.issues;
     }
+    if (err.name === "ValidationError" && !stage) stage = "MONGODB_PERSISTENCE";
 
     if (status >= 500) {
         console.error(`[${req.method} ${req.originalUrl}]`, err);
@@ -36,6 +39,8 @@ function errorHandler(err, req, res, _next) {
     res.status(status).json({
         error: {
             message,
+            ...(code ? { code } : {}),
+            ...(stage ? { stage } : {}),
             ...(details ? { details } : {}),
             ...(env.isProd ? {} : { stack: err.stack })
         }

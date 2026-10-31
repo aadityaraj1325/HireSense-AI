@@ -18,6 +18,7 @@ function formatBytes(n) {
 export function UploadDropzone({ onUploaded, compact = false }) {
   const [file, setFile] = useState(null);
   const [title, setTitle] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
   const [err, setErr] = useState("");
   const upload = useUploadResume();
 
@@ -44,7 +45,8 @@ export function UploadDropzone({ onUploaded, compact = false }) {
       const data = await upload.mutateAsync({ file, title });
       setFile(null);
       setTitle("");
-      onUploaded?.(data.resume);
+      setJobDescription("");
+      onUploaded?.(data.resume, { jobDescription: jobDescription.trim() });
     } catch (e) {
       setErr(e.message || "Upload failed");
     }
@@ -119,6 +121,14 @@ export function UploadDropzone({ onUploaded, compact = false }) {
             placeholder="Resume title (optional)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+          />
+          <textarea
+            className="min-h-32 w-full rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] resize-y"
+            placeholder="Paste the job description (optional). We will suggest suitable technical roles after upload."
+            value={jobDescription}
+            onChange={(e) => setJobDescription(e.target.value)}
+            maxLength={12000}
+            aria-label="Job description"
           />
           <Button
             onClick={submit}

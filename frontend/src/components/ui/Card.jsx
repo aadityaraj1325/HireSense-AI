@@ -13,14 +13,14 @@ const cardVariants = cva(
         flat: "",
       },
       radius: {
-        md: "rounded-2xl",
-        lg: "rounded-3xl",
+        md: "rounded-[22px]",
+        lg: "rounded-[28px]",
       },
       padding: {
         none: "",
-        sm: "p-4",
-        md: "p-5",
-        lg: "p-6",
+        sm: "p-5",
+        md: "p-6",
+        lg: "p-7",
       },
     },
     defaultVariants: { variant: "default", radius: "md", padding: "md" },
@@ -45,7 +45,7 @@ export const CardHeader = ({ className, ...props }) => (
 export const CardTitle = ({ className, ...props }) => (
   <h3
     className={cn(
-      "text-sm font-semibold text-[var(--ink)] tracking-tight",
+      "text-lg font-semibold text-[var(--ink)] tracking-[-0.025em] leading-tight",
       className
     )}
     {...props}
@@ -53,7 +53,7 @@ export const CardTitle = ({ className, ...props }) => (
 );
 
 export const CardDescription = ({ className, ...props }) => (
-  <p className={cn("text-xs text-[var(--ink-muted)]", className)} {...props} />
+  <p className={cn("text-sm leading-6 text-[var(--ink-muted)]", className)} {...props} />
 );
 
 export const CardContent = ({ className, ...props }) => (

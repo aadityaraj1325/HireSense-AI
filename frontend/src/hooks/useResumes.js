@@ -51,6 +51,15 @@ export function useAnalyses(id) {
   });
 }
 
+export function useKeywordIntelligence(id, versionId) {
+  return useQuery({
+    queryKey: ["resumes", "keyword-intelligence", id, versionId],
+    queryFn: () => resumesApi.keywordIntelligence(id, versionId),
+    enabled: !!id && !!versionId,
+    retry: false,
+  });
+}
+
 export function useUploadResume() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -82,12 +91,21 @@ export function useAnalyzeResume(id) {
           queryKey: resumeKeys.versionAnalysis(id, data.analysis.versionId),
         });
       }
+
       toast.success(
         "Analysis complete",
         `ATS score ${data?.analysis?.atsScore ?? "—"} / 100`
       );
     },
     onError: (e) => toast.error("Analysis failed", e?.message),
+  });
+}
+
+export function useSuggestRoles() {
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (jobDescription) => resumesApi.suggestRoles(jobDescription),
+    onError: (e) => toast.error("Couldn't suggest roles", e?.message),
   });
 }
 
@@ -107,7 +125,15 @@ export function useApplyRewrites(id) {
         `${data?.version?.label || "New version"} created`
       );
     },
-    onError: (e) => toast.error("Couldn't apply rewrites", e?.message),
+    onError: (e) => {
+      const code = e?.details?.code;
+      const message = code === "RESUME_VERSION_CONFLICT"
+        ? "The resume changed since these suggestions were generated. Re-analyze this version."
+        : code === "AMBIGUOUS_SOURCE_MATCH"
+          ? "A suggestion matched multiple resume fields. Re-analyze to generate anchored suggestions."
+          : e?.message;
+      toast.error("Couldn't apply rewrites", message);
+    },
   });
 }
 

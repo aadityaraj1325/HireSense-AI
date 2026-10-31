@@ -1,10 +1,38 @@
+# Dependencies
 node_modules/
+
+# Environment files and secrets
 .env
 .env.*
 *.env
+!.env.example
+!.env.sample
+
+# Build and test output
 dist/
 build/
 coverage/
+.nyc_output/
+
+# Runtime data and local uploads
+data/
+uploads/
+storage/
+*.sqlite
+*.sqlite3
+*.db
+mongo-data/
+mongodb-data/
+
+# Logs and temporary files
 logs/
 *.log
+*.tmp
+*.temp
+
+# Local tooling and OS files
 .DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

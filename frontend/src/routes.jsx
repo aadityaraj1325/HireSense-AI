@@ -1,10 +1,9 @@
 import { Navigate, createBrowserRouter } from "react-router-dom";
-import { AppShell } from "@/components/layout/AppShell";
+import { ProtectedShell } from "@/components/layout/ProtectedShell";
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Landing from "@/pages/Landing";
-import { Placeholder } from "@/pages/Placeholder";
 import Resumes from "@/pages/Resumes";
 import ResumeDetail from "@/pages/ResumeDetail";
 import ExportPage from "@/pages/Export";
@@ -12,10 +11,15 @@ import Insights from "@/pages/Insights";
 import Versions from "@/pages/Versions";
 import History from "@/pages/History";
 import Settings from "@/pages/Settings";
+import Interview from "@/pages/Interview";
+import KeywordIntelligence from "@/pages/KeywordIntelligence";
+import CareerRoadmap from "@/pages/CareerRoadmap";
+import MentorWorkspace from "@/pages/MentorWorkspace";
 import { useAuth } from "@/context/AuthContext";
 
-function ProtectedShell() {
+function HomeRoute() {
   const { user, loading } = useAuth();
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] text-[var(--ink-muted)] text-sm">
@@ -23,12 +27,12 @@ function ProtectedShell() {
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
-  return <AppShell />;
+
+  return user ? <Navigate to="/dashboard" replace /> : <Landing />;
 }
 
 export const router = createBrowserRouter([
-  { path: "/", element: <Landing /> },
+  { path: "/", element: <HomeRoute /> },
   { path: "/login", element: <Login /> },
   { path: "/register", element: <Register /> },
   {
@@ -38,11 +42,16 @@ export const router = createBrowserRouter([
       { path: "dashboard", element: <Dashboard /> },
       { path: "resumes", element: <Resumes /> },
       { path: "resumes/:id", element: <ResumeDetail /> },
+      { path: "resumes/:id/keyword-intelligence", element: <KeywordIntelligence /> },
+      { path: "resumes/:id/roadmap", element: <CareerRoadmap /> },
+      { path: "resumes/:id/roadmap/:roadmapId", element: <CareerRoadmap /> },
+      { path: "resumes/:id/roadmap/:roadmapId/mentor", element: <MentorWorkspace /> },
       { path: "resumes/:id/export", element: <ExportPage /> },
       { path: "insights", element: <Insights /> },
       { path: "versions", element: <Versions /> },
       { path: "history", element: <History /> },
       { path: "settings", element: <Settings /> },
+      { path: "interview", element: <Interview /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

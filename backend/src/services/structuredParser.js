@@ -198,15 +198,115 @@ const EMPTY = {
     interests: [],
 };
 
+const SECTION_ALIASES = [
+    ["summary", /^(professional\s+summary|summary|profile|career\s+objective|objective)$/i],
+    ["skills", /^(technical\s+skills?|skills?|core\s+competencies|soft\s+skills?)$/i],
+    ["experience", /^(work\s+experience|professional\s+experience|experience|employment\s+history|internships?)$/i],
+    ["projects", /^(projects?|academic\s+projects?|personal\s+projects?)$/i],
+    ["education", /^(education|academic\s+background|qualifications?)$/i],
+    ["certifications", /^(certifications?|licenses?)$/i],
+    ["languages", /^(languages?)$/i],
+    ["interests", /^(interests?|hobbies?)$/i],
+];
+
+function cleanHeading(line) {
+    return line.replace(/^[\s#\-:|]+|[\s:|]+$/g, "").trim();
+}
+
+function isHeading(line) {
+    const heading = cleanHeading(line);
+    return SECTION_ALIASES.find(([, pattern]) => pattern.test(heading));
+}
+
+function parseFallback(rawText) {
+    const result = JSON.parse(JSON.stringify(EMPTY));
+    const lines = String(rawText || "")
+        .replace(/\r\n?/g, "\n")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+    if (!lines.length) return result;
+
+    const first = lines[0];
+    if (!isHeading(first) && first.length < 80) {
+        result.basics.name = first;
+        const second = lines[1];
+        if (second && !isHeading(second) && second.length < 100) {
+            result.basics.title = second;
+        }
+    }
+
+    let active = null;
+    const buckets = new Map();
+    for (const line of lines) {
+        const heading = isHeading(line);
+        if (heading) {
+            active = heading[0];
+            buckets.set(active, []);
+            continue;
+        }
+        if (active) buckets.get(active).push(line);
+    }
+
+    const body = (key) => buckets.get(key) || [];
+    result.summary = body("summary").join(" ");
+    result.skills = body("skills")
+        .join(",")
+        .split(/[,;|•]/)
+        .map((item) => item.replace(/^[\s\-*]+/, "").trim())
+        .filter(Boolean);
+    result.languages = body("languages").join(",").split(/[,;|•]/).map((item) => item.trim()).filter(Boolean);
+    result.interests = body("interests").join(",").split(/[,;|•]/).map((item) => item.trim()).filter(Boolean);
+    result.certifications = body("certifications").map((name) => ({ name, issuer: "", date: "" }));
+    result.education = body("education").map((line) => ({
+        institution: line,
+        degree: "",
+        fieldOfStudy: "",
+        location: "",
+        period: "",
+        bullets: [],
+    }));
+    result.projects = body("projects").map((line) => ({
+        name: line.replace(/^[\s\-*•]+/, "").slice(0, 100),
+        description: line,
+        tech: [],
+        links: [],
+    }));
+    result.experience = body("experience").map((line) => ({
+        company: "",
+        role: "",
+        location: "",
+        period: "",
+        bullets: [line.replace(/^[\s\-*•]+/, "")],
+    }));
+    return result;
+}
+
+function hasStructuredContent(parsed) {
+    return Boolean(
+        parsed?.basics?.name ||
+        parsed?.basics?.title ||
+        parsed?.summary ||
+        parsed?.experience?.length ||
+        parsed?.education?.length ||
+        parsed?.skills?.length ||
+        parsed?.projects?.length ||
+        parsed?.certifications?.length ||
+        parsed?.languages?.length ||
+        parsed?.interests?.length
+    );
+}
+
 async function parseResume(rawText) {
-    if (!ai || !rawText?.trim()) return EMPTY;
+    if (!rawText?.trim()) return EMPTY;
+    if (!ai) return parseFallback(rawText);
 
     const prompt = buildPrompt(rawText);
 
     for (let attempt = 1; attempt <= 2; attempt++) {
         try {
             const result = await ai.models.generateContent({
-                model: env.geminiModel || "gemini-2.5-flash",
+                model: env.geminiModel,
                 contents: [{ role: "user", parts: [{ text: prompt }] }],
                 config: {
                     responseMimeType: "application/json",
@@ -219,16 +319,17 @@ async function parseResume(rawText) {
             if (!text) throw new Error("Empty response");
 
             const parsed = JSON.parse(text);
-            return validator.parse(parsed);
+            const validated = validator.parse(parsed);
+            return hasStructuredContent(validated) ? validated : parseFallback(rawText);
         } catch (err) {
             if (attempt === 2) {
-                console.error("Structured parse failed:", err.message);
-                return EMPTY;
+                console.error("Structured parse failed; using deterministic fallback:", err.message);
+                return parseFallback(rawText);
             }
         }
     }
 
-    return EMPTY;
+    return parseFallback(rawText);
 }
 
-module.exports = { parseResume, EMPTY };
+module.exports = { parseResume, parseFallback, EMPTY, hasStructuredContent };

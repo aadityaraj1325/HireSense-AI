@@ -433,7 +433,7 @@ export function ResumeDocument({ user, version, title }) {
                   ) : null}
                 </View>
                 <Text style={styles.eduSchool}>
-                  {edu.school}
+                  {edu.institution || edu.school}
                   {edu.location ? ` · ${edu.location}` : ""}
                 </Text>
                 {edu.details ? (
@@ -472,7 +472,7 @@ export function ResumeDocument({ user, version, title }) {
                     <Text style={styles.certMeta}> · {c.issuer}</Text>
                   ) : null}
                 </Text>
-                {c.year ? <Text style={styles.certMeta}>{c.year}</Text> : null}
+                {c.date || c.year ? <Text style={styles.certMeta}>{c.date || c.year}</Text> : null}
               </View>
             ))}
           </View>

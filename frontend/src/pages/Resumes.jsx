@@ -12,8 +12,8 @@ export default function Resumes() {
   const nav = useNavigate();
   const { data: resumes, isLoading } = useResumesList();
 
-  function handleUploaded(resume) {
-    nav(`/resumes/${resume._id}`);
+  function handleUploaded(resume, setup) {
+    nav(`/resumes/${resume._id}`, { state: setup });
   }
 
   return (

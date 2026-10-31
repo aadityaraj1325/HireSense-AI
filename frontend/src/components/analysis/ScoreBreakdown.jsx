@@ -1,8 +1,27 @@
 import { ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from "recharts";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 
-export function ScoreBreakdown({ breakdown }) {
-  if (!breakdown) return null;
+export function ScoreBreakdown({ breakdown, compatibilityBreakdown }) {
+  const source = compatibilityBreakdown || breakdown;
+  const compatibility = Boolean(compatibilityBreakdown);
+  if (!source) return null;
+  if (compatibility) {
+    const data = [
+      { axis: "Keywords", v: source.keywordMatching, full: 35 },
+      { axis: "Experience", v: source.experienceRelevance, full: 25 },
+      { axis: "Projects", v: source.projectRelevance, full: 20 },
+      { axis: "Education", v: source.educationCertifications, full: 10 },
+      { axis: "Structure", v: source.structure, full: 10 },
+    ];
+    return (
+      <Card className="h-full">
+        <CardHeader><div><CardTitle className="text-base">Score Breakdown</CardTitle><CardDescription className="mt-1">Deterministic compatibility rubric · total equals ATS score</CardDescription></div></CardHeader>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          {data.map((item) => <div key={item.axis} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3"><div className="text-[10px] uppercase tracking-wide text-[var(--ink-muted)]">{item.axis}</div><div className="mt-1 font-display text-lg font-semibold tabular text-[var(--ink)]">{item.v || 0}<span className="ml-1 text-xs font-normal text-[var(--ink-muted)]">/{item.full}</span></div></div>)}
+        </div>
+      </Card>
+    );
+  }
   const data = [
     { axis: "Keywords", v: breakdown.keywords, full: 25 },
     { axis: "Formatting", v: breakdown.formatting, full: 25 },

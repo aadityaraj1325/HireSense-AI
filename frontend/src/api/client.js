@@ -21,11 +21,11 @@ apiClient.interceptors.response.use(
       "Request failed";
     return Promise.reject({
       status: err.response?.status,
+      code: err.response?.data?.error?.code,
       message,
       details: err.response?.data?.error?.details,
       original: err,
     });
   }
 );
-
 

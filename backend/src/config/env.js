@@ -21,7 +21,14 @@ module.exports = {
         .split(",")
         .map((o) => o.trim())
         .filter(Boolean),
-    geminiApiKey: process.env.GEMINI_API_KEY || "",
-    geminiModel: process.env.GEMINI_MODEL || "gemini-3.6-flash",
+    geminiApiKey: /^(your[-_]|change[-_]|replace[-_]|<)/i.test(process.env.GEMINI_API_KEY || "")
+        ? ""
+        : (process.env.GEMINI_API_KEY || ""),
+    geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    geminiFallbackModels: (process.env.GEMINI_FALLBACK_MODELS || "gemini-3.5-flash-lite")
+        .split(",")
+        .map((model) => model.trim())
+        .filter(Boolean),
+    geminiTimeoutMs: Number(process.env.GEMINI_TIMEOUT_MS) || 30_000,
     isProd: process.env.NODE_ENV === "production",
 };

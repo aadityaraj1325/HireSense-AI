@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
+import { Sidebar } from "./Sidebar";
 
 export function AppShell() {
   const location = useLocation();
@@ -28,15 +28,11 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // close on route change
-  useEffect(() => {
-    setPaletteOpen(false);
-  }, [location.pathname]);
-
   return (
-    <div className="min-h-screen flex bg-[var(--bg)]">
-      <Sidebar />
-      <main className="flex-1 px-6 md:px-8 py-6 max-w-[1600px] mx-auto w-full">
+    <div className="min-h-screen bg-[var(--bg)]">
+      <div className="mx-auto flex min-h-screen max-w-[1760px]">
+        <Sidebar />
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-8 lg:px-12">
         <Topbar onOpenPalette={openPalette} />
         <AnimatePresence mode="wait">
           <motion.div
@@ -49,7 +45,8 @@ export function AppShell() {
             <Outlet />
           </motion.div>
         </AnimatePresence>
-      </main>
+        </main>
+      </div>
       <CommandPalette open={paletteOpen} onClose={closePalette} />
     </div>
   );
