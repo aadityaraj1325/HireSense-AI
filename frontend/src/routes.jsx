@@ -12,9 +12,12 @@ import Versions from "@/pages/Versions";
 import History from "@/pages/History";
 import Settings from "@/pages/Settings";
 import Interview from "@/pages/Interview";
+import LiveInterviewStudio from "@/pages/LiveInterviewStudio";
 import KeywordIntelligence from "@/pages/KeywordIntelligence";
 import CareerRoadmap from "@/pages/CareerRoadmap";
 import MentorWorkspace from "@/pages/MentorWorkspace";
+import DeveloperTracker from "@/pages/DeveloperTracker";
+import GapIntelligenceLab from "@/pages/GapIntelligenceLab";
 import { useAuth } from "@/context/AuthContext";
 
 function HomeRoute() {
@@ -49,9 +52,12 @@ export const router = createBrowserRouter([
       { path: "resumes/:id/export", element: <ExportPage /> },
       { path: "insights", element: <Insights /> },
       { path: "versions", element: <Versions /> },
-      { path: "history", element: <History /> },
+      { path: "history", element: <Navigate to="/settings?tab=history" replace /> },
       { path: "settings", element: <Settings /> },
+      { path: "settings/gap-intelligence", element: <GapIntelligenceLab /> },
       { path: "interview", element: <Interview /> },
+      { path: "interview/live/:sessionId", element: <LiveInterviewStudio /> },
+      { path: "developer-tracker", element: <DeveloperTracker /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

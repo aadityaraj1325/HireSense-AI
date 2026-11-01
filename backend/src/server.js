@@ -16,6 +16,8 @@ const versionsRouter = require("./routes/versions");
 const historyRouter = require("./routes/history");
 const interviewsRouter = require("./routes/interviews");
 const careerRoadmapsRouter = require("./routes/careerRoadmaps");
+const developerTrackerRouter = require("./routes/developerTracker");
+const gapIntelligenceRouter = require("./routes/gapIntelligence");
 
 const app = express();
 
@@ -41,6 +43,8 @@ app.use("/api/versions", versionsRouter);
 app.use("/api/history", historyRouter);
 app.use("/api/interviews", interviewsRouter);
 app.use("/api/career-roadmaps", careerRoadmapsRouter);
+app.use("/api/developer-tracker", developerTrackerRouter);
+app.use("/api/gap-intelligence", gapIntelligenceRouter);
 app.use(notFound);
 app.use(errorHandler);
 

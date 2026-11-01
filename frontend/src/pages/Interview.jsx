@@ -1,317 +1,571 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BrainCircuit,
-  CheckCircle2,
-  ChevronRight,
-  History,
-  Mic,
-  MicOff,
-  MessageCircleQuestion,
-  Volume2,
-  VolumeX,
   Sparkles,
-  Target,
+  FileText,
+  Upload,
+  Briefcase,
+  Layers,
+  Award,
+  Clock,
+  History,
+  CheckCircle2,
+  ArrowRight,
   TrendingUp,
+  Sliders,
+  ChevronRight,
+  Volume2,
 } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
 import { useResumesList } from "@/hooks/useResumes";
 import {
-  useAnswerInterview,
-  useCreateInterview,
-  useFinishInterview,
-  useInterview,
   useInterviews,
+  useInitStudio,
+  useAnalyzeJd,
+  useInterviewPerformance,
 } from "@/hooks/useInterviews";
 
-const difficultyTone = {
-  beginner: "success",
-  intermediate: "accent",
-  advanced: "danger",
-};
+const INTERVIEW_TYPES = [
+  { id: "technical", label: "Technical Deep-Dive", desc: "Core algorithms, architectures & code trade-offs" },
+  { id: "project", label: "Project Defense & STAR", desc: "In-depth interrogation of your specific built projects" },
+  { id: "system_design", label: "System Design & Scaling", desc: "Distributed architectures, queues & bottlenecks" },
+  { id: "behavioral", label: "Behavioral & Leadership", desc: "Collaboration, conflict resolution & teamwork" },
+  { id: "mixed", label: "Comprehensive Mixed Round", desc: "Balanced technical, architectural & behavioral" },
+];
 
-function Score({ value }) {
-  return (
-    <span className="font-display text-2xl font-semibold text-[var(--ink)]">
-      {value ?? "—"}<span className="text-sm text-[var(--ink-muted)]">/100</span>
-    </span>
-  );
-}
-
-function Report({ session }) {
-  const report = session.report;
-  return (
-    <div className="space-y-5">
-      <Card variant="accent" className="overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-2 text-white/75 text-xs uppercase tracking-wider">
-            <Sparkles size={14} /> Personalized report
-          </div>
-          <h2 className="font-display text-2xl font-semibold mt-3">{report?.summary || "Interview complete"}</h2>
-          <div className="flex items-end gap-3 mt-5">
-            <span className="text-5xl font-display font-semibold">{session.performance.averageScore}</span>
-            <span className="text-sm text-white/70 pb-2">average score</span>
-          </div>
-        </CardContent>
-      </Card>
-      <div className="grid gap-5 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Strengths</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            {(report?.strengths || []).map((item) => <div key={item} className="flex gap-2 text-sm"><CheckCircle2 size={16} className="text-[var(--success)] shrink-0 mt-0.5" />{item}</div>)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Weak concepts</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {session.weakConcepts.length ? session.weakConcepts.map((item) => <Badge key={item} tone="warning">{item}</Badge>) : <p className="text-sm text-[var(--ink-muted)]">No recurring weak concepts identified.</p>}
-          </CardContent>
-        </Card>
-      </div>
-      <Card>
-        <CardHeader><CardTitle>Revision recommendations</CardTitle><CardDescription>Use these before your next interview session.</CardDescription></CardHeader>
-        <CardContent className="space-y-3">
-          {(session.recommendations || []).map((item, index) => <div key={item} className="flex gap-3 text-sm"><span className="h-6 w-6 rounded-full bg-[var(--accent-soft)] text-[var(--accent-strong)] flex items-center justify-center text-xs font-semibold">{index + 1}</span><span>{item}</span></div>)}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function Setup({ resumes, onStart, isPending }) {
-  const [resumeId, setResumeId] = useState(resumes[0]?._id || "");
-  const [targetJob, setTargetJob] = useState("");
-  const [skills, setSkills] = useState("");
-  const [difficulty, setDifficulty] = useState("intermediate");
-  const [questionLimit, setQuestionLimit] = useState(8);
-  return (
-    <Card>
-      <CardHeader>
-        <div>
-          <CardTitle className="text-lg">Set up your interview</CardTitle>
-          <CardDescription className="mt-1">Gemini will use your selected resume, role, and skills to build a unique interview.</CardDescription>
-        </div>
-        <div className="h-10 w-10 rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)] flex items-center justify-center"><BrainCircuit size={20} /></div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <label className="block text-xs font-medium text-[var(--ink-muted)]">Resume
-          <select value={resumeId} onChange={(event) => setResumeId(event.target.value)} className="mt-1 h-10 w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm text-[var(--ink)] outline-none">
-            {resumes.map((resume) => <option key={resume._id} value={resume._id}>{resume.title}</option>)}
-          </select>
-        </label>
-        <label className="block text-xs font-medium text-[var(--ink-muted)]">Target job
-          <Input className="mt-1" value={targetJob} onChange={(event) => setTargetJob(event.target.value)} placeholder="e.g. Senior React Engineer" />
-        </label>
-        <label className="block text-xs font-medium text-[var(--ink-muted)]">Technical skills <span className="font-normal">(comma separated)</span>
-          <Input className="mt-1" value={skills} onChange={(event) => setSkills(event.target.value)} placeholder="React, Node.js, MongoDB, system design" />
-        </label>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block text-xs font-medium text-[var(--ink-muted)]">Starting difficulty
-            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="mt-1 h-10 w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 text-sm text-[var(--ink)] outline-none">
-              <option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option>
-            </select>
-          </label>
-          <label className="block text-xs font-medium text-[var(--ink-muted)]">Questions
-            <Input className="mt-1" type="number" min="1" max="20" value={questionLimit} onChange={(event) => setQuestionLimit(Number(event.target.value))} />
-          </label>
-        </div>
-        <Button className="w-full" variant="accent" size="lg" disabled={isPending || !resumeId || targetJob.trim().length < 2} onClick={() => onStart({ resumeId, targetJob, technicalSkills: skills.split(",").map((item) => item.trim()).filter(Boolean), difficulty, questionLimit })}>
-          {isPending ? "Generating your first question..." : "Start personalized interview"} <ChevronRight size={16} />
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-function Session({ session, onFinish, isAnswering, onAnswer }) {
-  const currentQuestion = session.questions.find((question) => !question.answer);
-  const [answer, setAnswer] = useState("");
-  const [voiceMode, setVoiceMode] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [voiceError, setVoiceError] = useState("");
-  const voiceSupported = typeof window !== "undefined" &&
-    Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-  const recognitionRef = useRef(null);
-  const answerRef = useRef("");
-  const voiceBaseRef = useRef("");
-  const finalVoiceRef = useRef("");
-  const usedVoiceRef = useRef(false);
-  const lastAnswered = [...session.questions].reverse().find((question) => question.answer);
-  const answeredCount = session.questions.filter((question) => question.answer).length;
-
-  useEffect(() => {
-    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Recognition) return undefined;
-    const recognition = new Recognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-    recognition.onresult = (event) => {
-      let interimTranscript = "";
-      let finalTranscript = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        if (event.results[index].isFinal) {
-          finalTranscript += event.results[index][0].transcript;
-        } else {
-          interimTranscript += event.results[index][0].transcript;
-        }
-      }
-      finalVoiceRef.current = `${finalVoiceRef.current} ${finalTranscript}`.trim();
-      const nextAnswer = `${voiceBaseRef.current} ${finalVoiceRef.current} ${interimTranscript}`.trim();
-      usedVoiceRef.current = true;
-      answerRef.current = nextAnswer;
-      setAnswer(nextAnswer);
-    };
-    recognition.onerror = (event) => {
-      setVoiceError(
-        event.error === "not-allowed"
-          ? "Microphone permission was denied. Allow microphone access and try again."
-          : `Voice transcription stopped: ${event.error}.`,
-      );
-      setIsListening(false);
-    };
-    recognition.onend = () => setIsListening(false);
-    recognitionRef.current = recognition;
-    return () => {
-      recognition.stop();
-      window.speechSynthesis?.cancel();
-    };
-  }, []);
-
-  useEffect(() => {
-    answerRef.current = answer;
-  }, [answer]);
-
-  useEffect(() => {
-    if (!voiceMode || !currentQuestion?.prompt || !window.speechSynthesis) return undefined;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(currentQuestion.prompt);
-    utterance.rate = 0.96;
-    window.speechSynthesis.speak(utterance);
-    return () => window.speechSynthesis.cancel();
-  }, [currentQuestion?.prompt, voiceMode]);
-
-  function toggleListening() {
-    setVoiceError("");
-    if (!recognitionRef.current) return;
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-      return;
-    }
-    try {
-      voiceBaseRef.current = answerRef.current;
-      finalVoiceRef.current = "";
-      recognitionRef.current.start();
-      setIsListening(true);
-    } catch (error) {
-      setVoiceError(`Unable to start microphone: ${error.message}`);
-    }
-  }
-
-  function submitAnswer() {
-    onAnswer({
-      questionId: currentQuestion._id,
-      answer,
-      answerSource: usedVoiceRef.current ? "voice" : "text",
-    });
-    recognitionRef.current?.stop();
-    setIsListening(false);
-    setAnswer("");
-    answerRef.current = "";
-    usedVoiceRef.current = false;
-  }
-
-  if (!currentQuestion || session.status === "completed") return <Report session={session} />;
-  return (
-    <div className="space-y-5">
-      {lastAnswered?.evaluation && (
-        <Card className="border-[var(--accent)]/25">
-          <CardHeader><CardTitle className="flex items-center gap-2"><CheckCircle2 size={16} className="text-[var(--success)]" /> Previous answer feedback</CardTitle><Score value={lastAnswered.evaluation.overallScore} /></CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-3 text-sm">
-            <div className="md:col-span-2 text-[var(--ink-muted)]">{lastAnswered.evaluation.feedback}</div>
-            <div className="text-xs text-[var(--ink-muted)]">Model answer<div className="text-[var(--ink)] mt-1">{lastAnswered.evaluation.modelAnswer}</div></div>
-          </CardContent>
-        </Card>
-      )}
-      <Card>
-        <CardHeader>
-          <div>
-            <div className="flex items-center gap-2 mb-2"><Badge tone={difficultyTone[currentQuestion.difficulty]}>{currentQuestion.difficulty}</Badge><Badge>{currentQuestion.type}</Badge><span className="text-xs text-[var(--ink-muted)]">Question {answeredCount + 1} of {session.questionLimit}</span></div>
-            <CardTitle className="text-xl leading-snug">{currentQuestion.prompt}</CardTitle>
-            <CardDescription className="mt-2">Focus: {currentQuestion.focus}</CardDescription>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {voiceMode && <Volume2 className="text-[var(--accent-strong)]" size={18} />}
-            <MessageCircleQuestion className="text-[var(--accent-strong)]" />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <textarea value={answer} onChange={(event) => setAnswer(event.target.value)} rows={7} placeholder="Think aloud. Explain your reasoning, trade-offs, and concrete examples..." className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm text-[var(--ink)] placeholder:text-[var(--ink-muted)] outline-none focus:border-[var(--accent)]/50 focus:ring-2 focus:ring-[var(--accent)]/15 resize-y" />
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <Button
-              type="button"
-              size="sm"
-              variant={voiceMode ? "soft" : "outline"}
-              onClick={() => setVoiceMode((enabled) => !enabled)}
-              disabled={!voiceSupported && !window.speechSynthesis}
-            >
-              {voiceMode ? <Volume2 size={14} /> : <VolumeX size={14} />}
-              {voiceMode ? "Voice interviewer on" : "Enable voice interviewer"}
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={isListening ? "accent" : "outline"}
-              onClick={toggleListening}
-              disabled={!voiceSupported}
-            >
-              {isListening ? <MicOff size={14} /> : <Mic size={14} />}
-              {isListening ? "Stop transcription" : "Answer with microphone"}
-            </Button>
-            {!voiceSupported && <span className="text-xs text-[var(--ink-muted)]">Live transcription is unavailable in this browser.</span>}
-            {isListening && <span className="text-xs text-[var(--accent-strong)]">Listening… speak naturally, then edit the transcript before submitting.</span>}
-          </div>
-          {voiceError && <p className="text-xs text-[var(--danger)] mt-2">{voiceError}</p>}
-          <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-            <span className="text-xs text-[var(--ink-muted)]">Answers are evaluated for correctness, relevance, clarity, and depth.</span>
-            <div className="flex gap-2"><Button variant="outline" disabled={isAnswering || answer.trim().length < 10} onClick={submitAnswer}>{isAnswering ? "Evaluating..." : "Submit answer"} <ChevronRight size={15} /></Button><Button variant="soft" disabled={isAnswering || answeredCount < 1} onClick={onFinish}>Finish and generate report</Button></div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function HistoryList({ sessions, onOpen }) {
-  return <Card><CardHeader><CardTitle className="flex items-center gap-2"><History size={16} /> Previous sessions</CardTitle><CardDescription>Performance across your personalized interviews.</CardDescription></CardHeader><CardContent className="space-y-2">{sessions.slice(0, 6).map((session) => <button key={session._id} onClick={() => onOpen(session._id)} className="w-full flex items-center justify-between gap-3 rounded-xl p-3 text-left hover:bg-[var(--surface-2)] transition-colors"><span><span className="block text-sm font-medium text-[var(--ink)]">{session.targetJob}</span><span className="text-xs text-[var(--ink-muted)]">{session.status} · {session.performance?.answered || 0} answers</span></span><span className="flex items-center gap-3"><Score value={session.performance?.averageScore} /><ChevronRight size={15} className="text-[var(--ink-muted)]" /></span></button>)}</CardContent></Card>;
-}
+const PERSONALITIES = [
+  { id: "professional", label: "Professional", desc: "Objective, balanced, structured tech lead" },
+  { id: "friendly", label: "Warm & Encouraging", desc: "Supportive mentor, prompts when stuck" },
+  { id: "strict", label: "Strict & Rigorous", desc: "Digs into edge cases, requires exact reasoning" },
+  { id: "challenging", label: "FAANG Staff Level", desc: "Complex stress-testing and architectural depth" },
+];
 
 export default function Interview() {
-  const { data: resumes = [], isLoading: resumesLoading } = useResumesList();
-  const { data: sessions = [] } = useInterviews();
-  const [sessionId, setSessionId] = useState(null);
-  const createInterview = useCreateInterview();
-  const answerInterview = useAnswerInterview();
-  const finishInterview = useFinishInterview();
-  const { data: session } = useInterview(sessionId);
-  const currentSession = session || (sessionId ? null : null);
-  const hasResumes = resumes.length > 0;
-  const latest = useMemo(() => sessions[0], [sessions]);
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("studio"); // "studio" | "history"
 
-  if (resumesLoading) return <div className="text-sm text-[var(--ink-muted)]">Loading interview workspace...</div>;
-  if (!hasResumes) return <EmptyState icon={Target} title="Upload a resume first" description="Your mock interview questions are personalized from your resume. Upload one before starting." />;
+  const { data: resumes = [], isLoading: resumesLoading } = useResumesList();
+  const { data: sessions = [], isLoading: sessionsLoading } = useInterviews();
+  const { data: perfSummary } = useInterviewPerformance();
+
+  const initStudio = useInitStudio();
+  const analyzeJd = useAnalyzeJd();
+
+  // Setup form states
+  const [selectedResumeId, setSelectedResumeId] = useState("");
+  const [targetRole, setTargetRole] = useState("Full Stack Engineer");
+  const [jobDescription, setJobDescription] = useState("");
+  const [jobAnalysis, setJobAnalysis] = useState(null);
+  const [interviewType, setInterviewType] = useState("technical");
+  const [difficulty, setDifficulty] = useState("adaptive");
+  const [duration, setDuration] = useState(30);
+  const [personality, setPersonality] = useState("professional");
+  const [interviewStyle, setInterviewStyle] = useState("conversational");
+
+  // Default resume selection
+  const activeResume = useMemo(() => {
+    if (!resumes.length) return null;
+    return resumes.find((r) => r._id === selectedResumeId) || resumes[0];
+  }, [resumes, selectedResumeId]);
+
+  // Handle JD auto-analysis
+  const handleAnalyzeJD = () => {
+    if (!jobDescription.trim()) return;
+    analyzeJd.mutate(
+      { jobDescription, targetRole },
+      {
+        onSuccess: (data) => {
+          setJobAnalysis(data.jobAnalysis);
+          if (data.jobAnalysis?.targetRole) {
+            setTargetRole(data.jobAnalysis.targetRole);
+          }
+        },
+      }
+    );
+  };
+
+  // Launch live interview
+  const handleStartLiveStudio = () => {
+    if (!activeResume) return;
+
+    const payload = {
+      resumeId: activeResume._id,
+      targetJob: (targetRole || activeResume.targetRole || "Software Engineer").trim(),
+      jobDescription: (jobDescription || "").trim(),
+      jobAnalysis: jobAnalysis || undefined,
+      interviewType,
+      difficulty,
+      duration: Number(duration) || 30,
+      interviewerPersonality: personality,
+      interviewStyle,
+      technicalSkills: (activeResume.parsedData?.skills || [])
+        .filter((s) => typeof s === "string" && s.trim().length > 0)
+        .slice(0, 30),
+    };
+
+    initStudio.mutate(payload, {
+      onSuccess: (data) => {
+        navigate(`/interview/live/${data.session._id}`);
+      },
+    });
+  };
+
+  if (resumesLoading) {
+    return <div className="text-sm text-[var(--ink-muted)] py-12 text-center">Loading interview configuration...</div>;
+  }
+
+  if (!resumes.length) {
+    return (
+      <EmptyState
+        icon={FileText}
+        title="Upload a resume first"
+        description="Your live interview questions and project deep-dives are grounded directly in your resume. Please upload a resume before entering the studio."
+        action={<Button variant="accent" onClick={() => navigate("/resumes")}>Upload Resume</Button>}
+      />
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><div className="flex items-center gap-2 text-xs uppercase tracking-wider text-[var(--accent-strong)] font-medium"><BrainCircuit size={14} /> Dynamic interview engine</div><h1 className="font-display text-3xl font-semibold tracking-tight mt-2">AI Mock Interview</h1><p className="text-sm text-[var(--ink-muted)] mt-1 max-w-2xl">Practice questions grounded in your resume and target role. Difficulty adapts after every answer.</p></div>
-        {session && <Button variant="outline" onClick={() => setSessionId(null)}>New interview</Button>}
+    <div className="space-y-6 pb-12 max-w-6xl mx-auto">
+      {/* Top Banner Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4 p-6 sm:p-8 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-card">
+        <div>
+          <div className="inline-flex items-center gap-2 text-xs uppercase tracking-wider text-[var(--accent-strong)] font-semibold mb-2">
+            <BrainCircuit size={16} /> HireSense AI • Live Interview Studio
+          </div>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-[var(--ink)]">
+            Real-Time AI Voice Interviewer
+          </h1>
+          <p className="text-sm text-[var(--ink-muted)] mt-1.5 max-w-2xl leading-relaxed">
+            Speak naturally through your microphone with an adaptive AI interviewer. Questions are grounded in your actual resume projects and target job specifications.
+          </p>
+        </div>
+
+        {/* Tab Toggle */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+          <button
+            type="button"
+            onClick={() => setActiveTab("studio")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === "studio"
+                ? "bg-[var(--surface)] text-[var(--ink)] shadow-sm border border-[var(--border)]"
+                : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <Volume2 size={14} /> Live Studio Setup
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+              activeTab === "history"
+                ? "bg-[var(--surface)] text-[var(--ink)] shadow-sm border border-[var(--border)]"
+                : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <History size={14} /> History ({sessions.length})
+          </button>
+        </div>
       </div>
-      {currentSession ? <Session session={currentSession} onFinish={() => finishInterview.mutate(sessionId)} isAnswering={answerInterview.isPending} onAnswer={(payload) => answerInterview.mutate({ id: sessionId, payload })} /> : <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]"><Setup resumes={resumes} onStart={(payload) => createInterview.mutate(payload, { onSuccess: (data) => setSessionId(data.session._id) })} isPending={createInterview.isPending} /><div className="space-y-5"><Card><CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp size={16} /> What gets evaluated</CardTitle></CardHeader><CardContent className="space-y-3 text-sm text-[var(--ink-muted)]"><div className="flex gap-3"><Sparkles size={16} className="text-[var(--accent-strong)]" />Technical correctness and depth</div><div className="flex gap-3"><MessageCircleQuestion size={16} className="text-[var(--accent-strong)]" />Clarity and relevance</div><div className="flex gap-3"><Target size={16} className="text-[var(--accent-strong)]" />Weak concepts and revision plan</div></CardContent></Card>{latest && <HistoryList sessions={sessions} onOpen={setSessionId} />}</div></div>}
-      {!sessionId && sessions.length > 0 && !latest && null}
+
+      {/* TAB 1: LIVE STUDIO SETUP */}
+      {activeTab === "studio" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Main Configuration Steps (8 cols) */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* STEP 1: RESUME SELECTION */}
+            <Card padding="lg" radius="lg">
+              <CardHeader>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--accent-strong)] font-mono">
+                    Step 1 of 3
+                  </div>
+                  <CardTitle className="text-lg mt-0.5">Select Grounding Resume</CardTitle>
+                  <CardDescription>The AI will read your projects and skills to test your real-world experience.</CardDescription>
+                </div>
+                <FileText size={20} className="text-[var(--accent)]" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  {resumes.map((r) => {
+                    const isSelected = (selectedResumeId || resumes[0]?._id) === r._id;
+                    return (
+                      <div
+                        key={r._id}
+                        onClick={() => setSelectedResumeId(r._id)}
+                        className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                          isSelected
+                            ? "bg-[var(--accent-soft)] border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
+                            : "bg-[var(--surface-2)] border-[var(--border)] hover:border-[var(--accent)]/40"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold text-[var(--ink)] truncate max-w-[200px]">{r.title || "Untitled Resume"}</h4>
+                          {isSelected && <CheckCircle2 size={16} className="text-[var(--accent-strong)] shrink-0" />}
+                        </div>
+                        <div className="text-xs text-[var(--ink-muted)] mt-1">
+                          Role: <span className="text-[var(--ink)] font-medium">{r.targetRole || "Software Engineer"}</span>
+                        </div>
+                        <div className="text-[11px] text-[var(--ink-muted)] mt-0.5">
+                          Updated {new Date(r.updatedAt || r.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Parsed Preview Pills */}
+                {activeResume?.parsedData?.skills?.length ? (
+                  <div className="pt-2 border-t border-[var(--border)]">
+                    <span className="text-xs font-semibold text-[var(--ink-muted)] block mb-1.5">
+                      Detected Skills Grounded:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeResume.parsedData.skills.slice(0, 10).map((skill, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-[var(--surface-2)] text-[var(--ink)] border border-[var(--border)]">
+                          {skill}
+                        </span>
+                      ))}
+                      {activeResume.parsedData.skills.length > 10 && (
+                        <span className="px-1.5 py-0.5 text-[10px] text-[var(--ink-muted)]">
+                          +{activeResume.parsedData.skills.length - 10} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+
+            {/* STEP 2: TARGET JOB DESCRIPTION */}
+            <Card padding="lg" radius="lg">
+              <CardHeader>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--accent-strong)] font-mono">
+                    Step 2 of 3
+                  </div>
+                  <CardTitle className="text-lg mt-0.5">Job Description &amp; Company Context</CardTitle>
+                  <CardDescription>Paste the complete job description. Gemini will extract requirements to tailor the interview.</CardDescription>
+                </div>
+                <Briefcase size={20} className="text-[var(--accent)]" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--ink)] mb-1">Target Role Title</label>
+                  <input
+                    type="text"
+                    value={targetRole}
+                    onChange={(e) => setTargetRole(e.target.value)}
+                    placeholder="e.g. Senior Full Stack Engineer, AI Engineer, Staff Backend Developer"
+                    className="w-full p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-sm text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-semibold text-[var(--ink)]">Paste Job Description</label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setJobDescription(
+                          "We are seeking a Senior Full Stack Engineer with strong experience in Node.js, React, distributed microservices, Redis caching, and real-time streaming architectures. Responsibilities include system architecture, API performance tuning, and mentoring junior engineers."
+                        )
+                      }
+                      className="text-[11px] text-[var(--accent-strong)] hover:underline"
+                    >
+                      Fill sample Tech Lead JD
+                    </button>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    placeholder="Paste job posting text here (responsibilities, requirements, tech stack)..."
+                    className="w-full p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-xs text-[var(--ink)] focus:outline-none focus:border-[var(--accent)] resize-y"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!jobDescription.trim() || analyzeJd.isPending}
+                    onClick={handleAnalyzeJD}
+                    className="text-xs gap-1.5"
+                  >
+                    <Sparkles size={14} className="text-[var(--accent)]" />
+                    <span>{analyzeJd.isPending ? "Analyzing with Gemini..." : "Extract Requirements with AI"}</span>
+                  </Button>
+
+                  {jobAnalysis && (
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 size={14} /> Company: {jobAnalysis.companyName || "Extracted"}
+                    </span>
+                  )}
+                </div>
+
+                {/* Extracted JD Summary Badge View */}
+                {jobAnalysis && (
+                  <div className="p-3.5 rounded-2xl bg-[var(--surface-2)]/60 border border-[var(--border)] space-y-2 text-xs">
+                    <div className="font-semibold text-[var(--ink)]">Extracted Target Requirements:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {jobAnalysis.requiredSkills?.map((s, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* STEP 3: INTERVIEW STUDIO CONFIGURATION */}
+            <Card padding="lg" radius="lg">
+              <CardHeader>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-[var(--accent-strong)] font-mono">
+                    Step 3 of 3
+                  </div>
+                  <CardTitle className="text-lg mt-0.5">Interview Parameters &amp; Persona</CardTitle>
+                  <CardDescription>Configure interview round type, interviewer persona, and duration.</CardDescription>
+                </div>
+                <Sliders size={20} className="text-[var(--accent)]" />
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Round Type */}
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--ink)] mb-2">Round Type</label>
+                  <div className="grid sm:grid-cols-2 gap-2.5">
+                    {INTERVIEW_TYPES.map((type) => (
+                      <div
+                        key={type.id}
+                        onClick={() => setInterviewType(type.id)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                          interviewType === type.id
+                            ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--ink)]"
+                            : "bg-[var(--surface-2)] border-[var(--border)] text-[var(--ink-muted)] hover:border-[var(--accent)]/40"
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-[var(--ink)]">{type.label}</div>
+                        <div className="text-[11px] text-[var(--ink-muted)] mt-0.5">{type.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Difficulty & Duration */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--ink)] mb-1">Difficulty Mode</label>
+                    <select
+                      value={difficulty}
+                      onChange={(e) => setDifficulty(e.target.value)}
+                      className="w-full p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-xs text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value="adaptive">Adaptive (Recommended - Shifts based on answers)</option>
+                      <option value="beginner">Beginner (Foundations &amp; Syntax)</option>
+                      <option value="intermediate">Intermediate (Core Architecture)</option>
+                      <option value="advanced">Advanced (High-scale &amp; Systems)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--ink)] mb-1">Interview Duration</label>
+                    <select
+                      value={duration}
+                      onChange={(e) => setDuration(Number(e.target.value))}
+                      className="w-full p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-xs text-[var(--ink)] focus:outline-none focus:border-[var(--accent)]"
+                    >
+                      <option value={15}>15 Minutes (Rapid Screening)</option>
+                      <option value={30}>30 Minutes (Standard Technical Round)</option>
+                      <option value={45}>45 Minutes (Full Deep-Dive)</option>
+                      <option value={60}>60 Minutes (Onsite Simulation)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Personality */}
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--ink)] mb-2">Interviewer Personality</label>
+                  <div className="grid sm:grid-cols-2 gap-2.5">
+                    {PERSONALITIES.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => setPersonality(p.id)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all ${
+                          personality === p.id
+                            ? "bg-[var(--accent-soft)] border-[var(--accent)] text-[var(--ink)]"
+                            : "bg-[var(--surface-2)] border-[var(--border)] text-[var(--ink-muted)] hover:border-[var(--accent)]/40"
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-[var(--ink)]">{p.label}</div>
+                        <div className="text-[11px] text-[var(--ink-muted)] mt-0.5">{p.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Sidebar: Pre-Interview Intelligence & Launch Action (4 cols) */}
+          <div className="lg:col-span-4 space-y-5">
+            <Card padding="lg" radius="lg" className="sticky top-24 border-[var(--accent)]/40 shadow-xl">
+              <CardHeader>
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Sparkles size={16} className="text-[var(--accent-strong)]" /> Pre-Interview Intelligence
+                  </CardTitle>
+                  <CardDescription className="text-xs">Summary of your live conversational session.</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4 text-xs">
+                <div className="space-y-2.5 p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ink-muted)]">Target Role:</span>
+                    <span className="font-semibold text-[var(--ink)] text-right truncate max-w-[150px]">{targetRole}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ink-muted)]">Selected Resume:</span>
+                    <span className="font-semibold text-[var(--ink)] text-right truncate max-w-[150px]">{activeResume?.title || "Active"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ink-muted)]">Round Type:</span>
+                    <span className="font-semibold text-[var(--ink)] capitalize">{interviewType}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ink-muted)]">Difficulty:</span>
+                    <span className="font-semibold text-[var(--accent-strong)] capitalize">{difficulty}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ink-muted)]">Target Time:</span>
+                    <span className="font-semibold text-[var(--ink)]">{duration} Minutes</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--ink-muted)]">Interviewer:</span>
+                    <span className="font-semibold text-[var(--ink)] capitalize">{personality}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[11px] leading-relaxed">
+                  Your interview will be generated using your selected resume and target job description. The AI will speak aloud, listen via your mic, and adapt in real time.
+                </div>
+
+                {/* Prominent Launch Button */}
+                <Button
+                  variant="accent"
+                  size="lg"
+                  disabled={initStudio.isPending}
+                  onClick={handleStartLiveStudio}
+                  className="w-full gap-2 font-bold text-sm shadow-xl"
+                >
+                  <BrainCircuit size={18} />
+                  <span>{initStudio.isPending ? "Generating Studio..." : "Start Live Voice Interview"}</span>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: INTERVIEW HISTORY & PERFORMANCE */}
+      {activeTab === "history" && (
+        <div className="space-y-6">
+          {/* Performance Overview Banner */}
+          {perfSummary && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-sm text-center">
+              <div>
+                <div className="text-2xl sm:text-3xl font-display font-bold text-[var(--ink)]">
+                  {perfSummary.sessionsCompleted || 0}
+                </div>
+                <div className="text-xs text-[var(--ink-muted)] mt-1 font-medium">Completed Sessions</div>
+              </div>
+              <div>
+                <div className="text-2xl sm:text-3xl font-display font-bold text-[var(--accent-strong)]">
+                  {perfSummary.averageScore || 0}%
+                </div>
+                <div className="text-xs text-[var(--ink-muted)] mt-1 font-medium">Average Performance</div>
+              </div>
+              <div>
+                <div className="text-2xl sm:text-3xl font-display font-bold text-[var(--ink)]">
+                  {perfSummary.answered || 0}
+                </div>
+                <div className="text-xs text-[var(--ink-muted)] mt-1 font-medium">Questions Answered</div>
+              </div>
+              <div>
+                <div className="text-2xl sm:text-3xl font-display font-bold text-amber-500">
+                  {perfSummary.weakConcepts?.length || 0}
+                </div>
+                <div className="text-xs text-[var(--ink-muted)] mt-1 font-medium">Flagged Concepts</div>
+              </div>
+            </div>
+          )}
+
+          {/* Past Sessions List */}
+          <Card padding="lg" radius="lg">
+            <CardHeader>
+              <div>
+                <CardTitle className="text-base">Previous Interview Sessions</CardTitle>
+                <CardDescription>Review questions, evaluations, and revision roadmaps from past sessions.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {sessions.length === 0 ? (
+                <div className="text-center py-12 text-xs text-[var(--ink-muted)]">
+                  No interview sessions recorded yet. Start your first session above!
+                </div>
+              ) : (
+                <div className="divide-y divide-[var(--border)]">
+                  {sessions.map((s) => (
+                    <div key={s._id} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-[var(--ink)]">{s.targetJob}</h4>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--surface-2)] text-[var(--ink-muted)] border border-[var(--border)] capitalize">
+                            {s.mode || "studio"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-[var(--ink-muted)]">
+                          <span>{new Date(s.createdAt).toLocaleDateString()}</span>
+                          <span>•</span>
+                          <span>{s.questions?.length || 0} Questions</span>
+                          <span>•</span>
+                          <span className="capitalize">{s.currentDifficulty || s.requestedDifficulty}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        {s.performance?.averageScore != null && (
+                          <div className="text-right">
+                            <span className="text-lg font-bold font-mono text-[var(--accent-strong)]">
+                              {s.performance.averageScore}%
+                            </span>
+                            <span className="text-[10px] text-[var(--ink-muted)] block">Avg Score</span>
+                          </div>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/interview/live/${s._id}`)}
+                          className="gap-1.5 text-xs"
+                        >
+                          View Studio / Report <ArrowRight size={13} />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

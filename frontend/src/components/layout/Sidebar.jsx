@@ -4,11 +4,11 @@ import {
   FileText,
   BarChart3,
   Layers,
-  History,
   Settings,
   LogOut,
   BrainCircuit,
   MessageCircle,
+  Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -18,8 +18,8 @@ const NAV = [
   { to: "/resumes", icon: FileText, label: "Resumes" },
   { to: "/insights", icon: BarChart3, label: "Insights & Analytics" },
   { to: "/versions", icon: Layers, label: "Resume Versions" },
-  { to: "/history", icon: History, label: "History" },
   { to: "/interview", icon: BrainCircuit, label: "AI Career Intelligence" },
+  { to: "/developer-tracker", icon: Code2, label: "Developer Tracker" },
 ];
 
 const ROW_BASE =

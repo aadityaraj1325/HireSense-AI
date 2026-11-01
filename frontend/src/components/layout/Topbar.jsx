@@ -14,6 +14,7 @@ import {
   Sun,
   Moon,
   X,
+  Code2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/components/ui/IconButton";
@@ -28,7 +29,7 @@ const NAV = [
   { to: "/resumes", label: "Resumes", icon: FileText },
   { to: "/insights", label: "Insights", icon: BarChart3 },
   { to: "/versions", label: "Versions", icon: Layers },
-  { to: "/history", label: "History", icon: History },
+  { to: "/developer-tracker", label: "Dev Tracker", icon: Code2 },
 ];
 
 export function Topbar({ onOpenPalette }) {
@@ -42,23 +43,36 @@ export function Topbar({ onOpenPalette }) {
 
   return (
     <header className="sticky top-0 z-30 -mx-4 sm:-mx-8 lg:-mx-12 px-4 sm:px-8 lg:px-12 bg-[var(--bg)]/95 backdrop-blur-md">
-      <div className="grid min-h-[80px] grid-cols-[auto_minmax(220px,1fr)_auto_auto] items-center gap-4 border-b border-[var(--border)]">
-        <button type="button" onClick={() => navigate("/dashboard")} className="flex min-w-0 shrink-0 items-center gap-3 text-left">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-            <AILogo />
-          </div>
-          <div className="hidden min-w-0 sm:block">
-            <div className="font-display text-base font-semibold tracking-tight text-[var(--ink)]">HireSense AI</div>
-            <div className="truncate text-[11px] uppercase tracking-[0.14em] text-[var(--ink-muted)]">Career intelligence</div>
-          </div>
-        </button>
+      <div className="flex min-h-[72px] items-center justify-between gap-3 border-b border-[var(--border)]">
+        {/* Brand with interactive AI Logo and clean short name badge */}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            title="HireSense AI — Go to Dashboard"
+            className="group flex items-center gap-2.5 rounded-2xl p-1 -ml-1 transition-all hover:bg-[var(--surface-2)] active:scale-95 cursor-pointer text-left"
+          >
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] group-hover:border-[var(--accent)] group-hover:shadow-[0_0_16px_rgba(47,141,70,0.35)] transition-all overflow-hidden">
+              <AILogo isInteractive />
+            </div>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="font-display text-base font-bold tracking-tight text-[var(--ink)] group-hover:text-[var(--accent)] transition-colors">
+                HireSense
+              </span>
+              <span className="px-1.5 py-0.5 text-[10px] font-bold font-mono uppercase tracking-wider rounded-md bg-[var(--accent-soft)] text-[var(--accent-strong)] border border-[var(--accent)]/30 group-hover:bg-[var(--accent)] group-hover:text-white transition-all shadow-sm">
+                AI
+              </span>
+            </div>
+          </button>
 
-        <div className="hidden min-w-0 max-w-[300px] xl:block">
-          <h1 className="whitespace-nowrap font-display text-lg font-semibold tracking-tight text-[var(--ink)]">Good morning, {firstName}</h1>
-          <p className="mt-0.5 truncate whitespace-nowrap text-xs text-[var(--ink-muted)]">Your latest career insights and professional growth in one place.</p>
+          {/* Compact non-overlapping user greeting on 2xl+ viewports */}
+          <div className="hidden 2xl:flex items-center gap-2 pl-3 border-l border-[var(--border)] text-xs text-[var(--ink-muted)]">
+            <span>Hi, <strong className="text-[var(--ink)] font-semibold">{firstName}</strong></span>
+          </div>
         </div>
 
-        <nav className="hidden min-w-0 items-center justify-center gap-0.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 md:flex">
+        {/* Center Pill Navigation */}
+        <nav className="hidden shrink-0 items-center justify-center gap-0.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 md:flex">
           {NAV.map(({ to, label, icon: Icon }) => (
             <NavLink key={to} to={to} className={({ isActive }) => cn(
               "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors xl:px-3",
@@ -89,6 +103,7 @@ export function Topbar({ onOpenPalette }) {
                   <div className="text-sm font-semibold truncate">{user?.name || "Account"}</div>
                   <div className="text-xs text-[var(--ink-muted)] truncate">{user?.email}</div>
                 </div>
+                <button type="button" onClick={() => { navigate("/settings?tab=history"); setProfileOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--surface-2)]"><History size={15} /> History</button>
                 <button type="button" onClick={() => { navigate("/settings"); setProfileOpen(false); }} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left hover:bg-[var(--surface-2)]"><Settings size={15} /> Settings</button>
                 <button type="button" onClick={logout} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left text-[var(--danger)] hover:bg-[var(--surface-2)]"><LogOut size={15} /> Log out</button>
               </div>
