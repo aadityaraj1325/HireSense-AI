@@ -385,6 +385,13 @@ router.post("/studio/:id/finish", validate(idParam, "params"), asyncHandler(asyn
     const { version } = await loadResume(req.user._id, session.resumeId, session.resumeVersionId);
 
     updatePerformance(session);
+    if (req.body.monitoring) {
+        session.monitoring = {
+            ...(session.monitoring || {}),
+            ...req.body.monitoring,
+        };
+    }
+
     const report = await generateComprehensiveReport({
         session,
         resumeText: version.rawText,
@@ -397,6 +404,115 @@ router.post("/studio/:id/finish", validate(idParam, "params"), asyncHandler(asyn
     await session.save();
 
     res.json({ session, report });
+}));
+
+/**
+ * POST /api/interviews/studio/:id/monitoring
+ * Log visual presence and session monitoring telemetry
+ */
+router.post("/studio/:id/monitoring", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    if (req.body.monitoring) {
+        session.monitoring = {
+            ...(session.monitoring || {}),
+            ...req.body.monitoring,
+        };
+        await session.save();
+    }
+    res.json({ success: true, monitoring: session.monitoring });
+}));
+
+/**
+ * GET /api/interviews/active
+ * Check if current user has an ongoing active live interview session
+ */
+router.get("/active", asyncHandler(async (req, res) => {
+    const session = await InterviewSession.findOne({
+        userId: req.user._id,
+        status: "active",
+    })
+        .sort({ createdAt: -1 })
+        .populate("resumeId", "title targetRole")
+        .lean();
+
+    res.json({ session: session || null });
+}));
+
+/**
+ * Intelligent Live Interview Protocol (IIP) REST Endpoints
+ * Supports standard RESTful session operations:
+ * POST /sessions, POST /sessions/:id/start, POST /sessions/:id/answer,
+ * POST /sessions/:id/repeat, POST /sessions/:id/pause, POST /sessions/:id/resume,
+ * POST /sessions/:id/end, GET /sessions/:id, GET /sessions/:id/report
+ */
+
+router.post("/sessions", validate(studioInitSchema), asyncHandler(async (req, res, next) => {
+    // Forward directly to studio init logic
+    req.url = "/studio/init";
+    return router.handle(req, res, next);
+}));
+
+router.post("/sessions/:id/start", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    session.status = "active";
+    if (!session.startedAt) session.startedAt = new Date();
+    await session.save();
+    res.json({ success: true, session });
+}));
+
+router.post("/sessions/:id/answer", validate(idParam, "params"), validate(studioTurnSchema), asyncHandler(async (req, res, next) => {
+    req.url = `/studio/${req.params.id}/turn`;
+    return router.handle(req, res, next);
+}));
+
+router.post("/sessions/:id/repeat", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    const activeQuestion =
+        session.conversationHistory?.slice().reverse().find((m) => m.role === "interviewer")?.text ||
+        session.questions?.at(-1)?.prompt ||
+        "Could you explain your recent technical work?";
+    
+    session.conversationHistory.push({
+        id: `repeat-${Date.now()}`,
+        role: "system",
+        text: "Candidate requested to repeat the question.",
+        timestamp: new Date(),
+    });
+    await session.save();
+    res.json({ success: true, question: activeQuestion });
+}));
+
+router.post("/sessions/:id/pause", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    if (session.status === "active") {
+        session.status = "paused";
+        await session.save();
+    }
+    res.json({ success: true, session });
+}));
+
+router.post("/sessions/:id/resume", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    if (session.status === "paused") {
+        session.status = "active";
+        await session.save();
+    }
+    res.json({ success: true, session });
+}));
+
+router.post("/sessions/:id/end", validate(idParam, "params"), asyncHandler(async (req, res, next) => {
+    req.url = `/studio/${req.params.id}/finish`;
+    return router.handle(req, res, next);
+}));
+
+router.get("/sessions/:id", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    res.json({ session });
+}));
+
+router.get("/sessions/:id/report", validate(idParam, "params"), asyncHandler(async (req, res) => {
+    const session = await loadSession(req);
+    res.json({ session, report: session.detailedReport || session.report || null });
 }));
 
 /* ==========================================================================

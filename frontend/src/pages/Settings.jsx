@@ -11,6 +11,7 @@ import {
   ExternalLink,
   ArrowRight,
   BrainCircuit,
+  BarChart3,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
@@ -410,6 +411,40 @@ function HistorySection() {
   );
 }
 
+function InsightsSection() {
+  const navigate = useNavigate();
+  return (
+    <Card padding="lg" className="max-w-2xl space-y-4">
+      <CardHeader>
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
+            <BarChart3 size={18} />
+          </div>
+          <div>
+            <CardTitle className="text-base">Insights & Analytics</CardTitle>
+            <CardDescription className="mt-0.5">
+              Comprehensive resume score trajectory, ATS benchmarks, and historical analysis.
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+
+      <p className="text-xs text-[var(--ink-muted)] leading-relaxed">
+        Access detailed analytics on your resume scores over time, category-by-category breakdowns, score velocity, and priority improvement recommendations.
+      </p>
+
+      <Button
+        type="button"
+        onClick={() => navigate("/insights")}
+        className="rounded-xl text-xs flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+      >
+        <span>Open Dedicated Insights & Analytics Workspace</span>
+        <ArrowRight size={14} />
+      </Button>
+    </Card>
+  );
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -429,7 +464,7 @@ export default function Settings() {
     <div className="space-y-6">
       <PageHeader
         title="Settings"
-        description="Manage your account profile, look & feel, password, and activity history."
+        description="Manage your account profile, look & feel, password, activity history, and analytics."
       />
 
       <Tabs value={tab} onValueChange={handleTabChange}>
@@ -440,6 +475,9 @@ export default function Settings() {
             <TabsTrigger value="password">Password</TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5 flex items-center">
               <HistoryIcon size={14} /> History
+            </TabsTrigger>
+            <TabsTrigger value="insights" className="gap-1.5 flex items-center">
+              <BarChart3 size={14} /> Insights & Analytics
             </TabsTrigger>
           </TabsList>
 
@@ -467,6 +505,9 @@ export default function Settings() {
           </TabsContent>
           <TabsContent value="history">
             <HistorySection />
+          </TabsContent>
+          <TabsContent value="insights">
+            <InsightsSection />
           </TabsContent>
         </div>
       </Tabs>

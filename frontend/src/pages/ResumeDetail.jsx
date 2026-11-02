@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Sparkles, ArrowLeft, Loader2, FileText, Download, ClipboardPaste, Search, ChevronDown, ChevronUp, Route } from "lucide-react";
+import { Sparkles, ArrowLeft, Loader2, FileText, Download, ClipboardPaste, Search, ChevronDown, ChevronUp, Route, Layers } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,7 @@ import { BulletRewrites } from "@/components/analysis/BulletRewrites";
 import { CompatibilityPanel } from "@/components/analysis/CompatibilityPanel";
 import { AtsImprovementPlan } from "@/components/analysis/AtsImprovementPlan";
 import { VersionSwitcher } from "@/components/resume/VersionSwitcher";
+import { CVVersionsPanel } from "@/components/resume/CVVersionsPanel";
 import { DiffView } from "@/components/resume/DiffView";
 import { relativeTime } from "@/lib/utils";
 import {
@@ -60,7 +61,13 @@ export default function ResumeDetail() {
     location.state?.jobDescription || ""
   );
   const [suggestedRoles, setSuggestedRoles] = useState([]);
-  const [tab, setTab] = useState("score");
+  const queryParams = new URLSearchParams(location.search);
+  const [tab, setTab] = useState(queryParams.get("tab") || "score");
+
+  useEffect(() => {
+    const t = new URLSearchParams(location.search).get("tab");
+    if (t) setTab(t);
+  }, [location.search]);
 
   useEffect(() => {
     if (analysis?.suggestedRoles?.length) {
@@ -162,9 +169,16 @@ export default function ResumeDetail() {
             : ""
         }
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button variant="ghost" onClick={() => nav("/resumes")}>
               <ArrowLeft size={14} /> All resumes
+            </Button>
+            <Button
+              variant={tab === "versions" ? "accent" : "outline"}
+              onClick={() => setTab("versions")}
+              className="gap-1.5"
+            >
+              <Layers size={14} /> Versions ({versions.length})
             </Button>
             <Button variant="outline" onClick={() => nav(`/resumes/${id}/keyword-intelligence`)}>
               <Search size={14} /> Keyword intelligence
@@ -282,133 +296,182 @@ export default function ResumeDetail() {
         )}
       </Card>
 
-      {!analysis && !analysisQuery.isLoading && (
-        <EmptyState
-          icon={Sparkles}
-          title="No analysis yet for this version"
-          description="Click Analyze above to score this resume version with AI."
+      {tab === "versions" ? (
+        <CVVersionsPanel
+          versions={versions}
+          activeVersionId={activeVersionId}
+          onSelectVersion={(vId) => {
+            setActiveVersionId(vId);
+          }}
+          onOpenDiff={(vId) => {
+            setTab("diff");
+          }}
+          onExport={(vId) => {
+            nav(`/resumes/${id}/export`);
+          }}
+          onCreateVersion={() => {
+            setTab("rewrites");
+          }}
+          resumeTitle={resume?.title}
         />
-      )}
-
-      {analysisQuery.isLoading && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <Skeleton className="h-[280px] rounded-3xl" />
-          <Skeleton className="h-[280px] rounded-3xl lg:col-span-2" />
-        </div>
-      )}
-
-      {analysis && (
+      ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <div className="lg:col-span-4">
-              <AtsGauge score={analysis.atsScore} delta={0} />
-            </div>
-            <div className="lg:col-span-5">
-              <ScoreBreakdown
-                breakdown={analysis.scoreBreakdown}
-                compatibilityBreakdown={analysis.compatibilityBreakdown}
-              />
-            </div>
-            <div className="lg:col-span-3">
-              <Card className="h-full flex flex-col">
-                <CardHeader>
-                  <div>
-                    <CardTitle className="text-base">Verdict</CardTitle>
-                    <CardDescription className="mt-1">
-                      AI overall summary
-                    </CardDescription>
-                  </div>
-                  <Badge tone="accent">{analysis.model}</Badge>
-                </CardHeader>
-                <p className="text-sm text-[var(--ink)] leading-relaxed">
-                  {analysis.summary}
-                </p>
-              </Card>
-            </div>
-          </div>
+          {!analysis && !analysisQuery.isLoading && (
+            <EmptyState
+              icon={Sparkles}
+              title="No analysis yet for this version"
+              description="Click Analyze above to score this resume version with AI, or explore this CV's versions."
+              action={
+                <Button variant="outline" onClick={() => setTab("versions")} className="gap-1.5">
+                  <Layers size={14} /> View CV Versions ({versions.length})
+                </Button>
+              }
+            />
+          )}
 
-          <AtsImprovementPlan
-            analysis={analysis}
-            onOpenIssues={() => setTab("score")}
-            onAnalyze={runAnalyze}
-          />
+          {analysisQuery.isLoading && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <Skeleton className="h-[280px] rounded-3xl" />
+              <Skeleton className="h-[280px] rounded-3xl lg:col-span-2" />
+            </div>
+          )}
 
-          <Tabs value={tab} onValueChange={setTab}>
-            <TabsList>
-              <TabsTrigger value="score">Issues</TabsTrigger>
-              <TabsTrigger value="strengths">Strengths</TabsTrigger>
-              <TabsTrigger value="keywords">Keywords</TabsTrigger>
-              <TabsTrigger value="rewrites">Rewrites</TabsTrigger>
-              {analysis.compatibilityBreakdown && (
-                <TabsTrigger value="compatibility">Job compatibility</TabsTrigger>
-              )}
-              {analysis?.originalityIssues?.length > 0 && (
-                <TabsTrigger value="originality">Originality</TabsTrigger>
-              )}
-              {versions.length >= 2 && (
-                <TabsTrigger value="diff">Diff</TabsTrigger>
-              )}
-            </TabsList>
-
-            <div className="mt-5">
-              <TabsContent value="score">
-                <IssuesList issues={analysis.issues} />
-              </TabsContent>
-              <TabsContent value="strengths">
-                <StrengthsList strengths={analysis.strengths} />
-              </TabsContent>
-              <TabsContent value="keywords">
-                <KeywordChips
-                  present={analysis.keywordsPresent}
-                  missing={analysis.keywordsMissing}
-                />
-              </TabsContent>
-              <TabsContent value="rewrites">
-                <BulletRewrites
-                  rewrites={analysis.bulletRewrites}
-                  onApply={runApplyRewrites}
-                  isApplying={applyRewrites.isPending}
-                  error={applyRewrites.error?.message}
-                />
-              </TabsContent>
-              {analysis.compatibilityBreakdown && (
-                <TabsContent value="compatibility">
-                  <CompatibilityPanel
-                    breakdown={analysis.compatibilityBreakdown}
-                    matches={analysis.keywordMatches}
-                    recommendations={analysis.improvementRecommendations}
-                    rubricVersion={analysis.scoringRubricVersion}
+          {analysis && (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <div className="lg:col-span-4">
+                  <AtsGauge score={analysis.atsScore} delta={0} />
+                </div>
+                <div className="lg:col-span-5">
+                  <ScoreBreakdown
+                    breakdown={analysis.scoreBreakdown}
+                    compatibilityBreakdown={analysis.compatibilityBreakdown}
                   />
-                </TabsContent>
-              )}
-              {analysis.originalityIssues?.length > 0 && (
-                <TabsContent value="originality">
-                  <Card>
+                </div>
+                <div className="lg:col-span-3">
+                  <Card className="h-full flex flex-col">
                     <CardHeader>
                       <div>
-                        <CardTitle className="text-base">Originality wording check</CardTitle>
+                        <CardTitle className="text-base">Verdict</CardTitle>
                         <CardDescription className="mt-1">
-                          These are generic or potentially copied-sounding phrases, not an internet plagiarism verdict.
+                          AI overall summary
                         </CardDescription>
                       </div>
+                      <Badge tone="accent">{analysis.model}</Badge>
                     </CardHeader>
-                    <div className="space-y-3">
-                      {analysis.originalityIssues.map((issue, index) => (
-                        <div key={`${issue.phrase}-${index}`} className="rounded-2xl border border-[var(--border)] p-4">
-                          <div className="text-sm font-medium text-[var(--ink)]">“{issue.phrase}”</div>
-                          <div className="mt-1 text-xs text-[var(--ink-muted)]">{issue.reason}</div>
-                          <div className="mt-2 text-sm text-[var(--accent-strong)]">{issue.suggestion}</div>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="text-sm text-[var(--ink)] leading-relaxed">
+                      {analysis.summary}
+                    </p>
                   </Card>
-                </TabsContent>
-              )}
-              <TabsContent value="diff">
-                <DiffView resumeId={id} versions={versions} />
-              </TabsContent>
-            </div>
-          </Tabs>
+                </div>
+              </div>
+
+              <AtsImprovementPlan
+                analysis={analysis}
+                onOpenIssues={() => setTab("score")}
+                onAnalyze={runAnalyze}
+              />
+
+              <Tabs value={tab} onValueChange={setTab}>
+                <TabsList>
+                  <TabsTrigger value="score">Issues</TabsTrigger>
+                  <TabsTrigger value="strengths">Strengths</TabsTrigger>
+                  <TabsTrigger value="keywords">Keywords</TabsTrigger>
+                  <TabsTrigger value="rewrites">Rewrites</TabsTrigger>
+                  <TabsTrigger value="versions" className="gap-1.5">
+                    <Layers size={13} /> Versions ({versions.length})
+                  </TabsTrigger>
+                  {analysis.compatibilityBreakdown && (
+                    <TabsTrigger value="compatibility">Job compatibility</TabsTrigger>
+                  )}
+                  {analysis?.originalityIssues?.length > 0 && (
+                    <TabsTrigger value="originality">Originality</TabsTrigger>
+                  )}
+                  {versions.length >= 2 && (
+                    <TabsTrigger value="diff">Diff</TabsTrigger>
+                  )}
+                </TabsList>
+
+                <div className="mt-5">
+                  <TabsContent value="score">
+                    <IssuesList issues={analysis.issues} />
+                  </TabsContent>
+                  <TabsContent value="strengths">
+                    <StrengthsList strengths={analysis.strengths} />
+                  </TabsContent>
+                  <TabsContent value="keywords">
+                    <KeywordChips
+                      present={analysis.keywordsPresent}
+                      missing={analysis.keywordsMissing}
+                    />
+                  </TabsContent>
+                  <TabsContent value="rewrites">
+                    <BulletRewrites
+                      rewrites={analysis.bulletRewrites}
+                      onApply={runApplyRewrites}
+                      isApplying={applyRewrites.isPending}
+                      error={applyRewrites.error?.message}
+                    />
+                  </TabsContent>
+                  <TabsContent value="versions">
+                    <CVVersionsPanel
+                      versions={versions}
+                      activeVersionId={activeVersionId}
+                      onSelectVersion={(vId) => {
+                        setActiveVersionId(vId);
+                      }}
+                      onOpenDiff={(vId) => {
+                        setTab("diff");
+                      }}
+                      onExport={(vId) => {
+                        nav(`/resumes/${id}/export`);
+                      }}
+                      onCreateVersion={() => {
+                        setTab("rewrites");
+                      }}
+                      resumeTitle={resume?.title}
+                    />
+                  </TabsContent>
+                  {analysis.compatibilityBreakdown && (
+                    <TabsContent value="compatibility">
+                      <CompatibilityPanel
+                        breakdown={analysis.compatibilityBreakdown}
+                        matches={analysis.keywordMatches}
+                        recommendations={analysis.improvementRecommendations}
+                        rubricVersion={analysis.scoringRubricVersion}
+                      />
+                    </TabsContent>
+                  )}
+                  {analysis.originalityIssues?.length > 0 && (
+                    <TabsContent value="originality">
+                      <Card>
+                        <CardHeader>
+                          <div>
+                            <CardTitle className="text-base">Originality wording check</CardTitle>
+                            <CardDescription className="mt-1">
+                              These are generic or potentially copied-sounding phrases, not an internet plagiarism verdict.
+                            </CardDescription>
+                          </div>
+                        </CardHeader>
+                        <div className="space-y-3">
+                          {analysis.originalityIssues.map((issue, index) => (
+                            <div key={`${issue.phrase}-${index}`} className="rounded-2xl border border-[var(--border)] p-4">
+                              <div className="text-sm font-medium text-[var(--ink)]">“{issue.phrase}”</div>
+                              <div className="mt-1 text-xs text-[var(--ink-muted)]">{issue.reason}</div>
+                              <div className="mt-2 text-sm text-[var(--accent-strong)]">{issue.suggestion}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    </TabsContent>
+                  )}
+                  <TabsContent value="diff">
+                    <DiffView resumeId={id} versions={versions} />
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </>
+          )}
         </>
       )}
 

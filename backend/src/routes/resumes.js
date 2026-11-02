@@ -115,6 +115,7 @@ router.get(
     asyncHandler(async (req, res) => {
         const resume = await loadOwnedResume(req);
         const versions = await ResumeVersion.find({ resumeId: resume._id })
+            .populate("latestAnalysisId", "atsScore targetRole model createdAt")
             .sort({ versionNumber: 1 })
             .lean();
         res.json({ resume, versions });

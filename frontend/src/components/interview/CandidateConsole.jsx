@@ -1,5 +1,18 @@
 import { useState } from "react";
-import { Mic, MicOff, Send, Hand, MessageSquare, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Send,
+  Hand,
+  MessageSquare,
+  ChevronUp,
+  ChevronDown,
+  RotateCcw,
+  Clock,
+  Sparkles,
+  HelpCircle,
+  Pause,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { AudioWaveform } from "./AudioWaveform";
@@ -9,9 +22,13 @@ export function CandidateConsole({
   isMuted,
   audioLevel,
   interimTranscript,
+  answerElapsedSeconds = 0,
+  showTimeoutPrompt = false,
   onInterrupt,
   onToggleMute,
   onSubmitAnswer,
+  onReplayQuestion,
+  onPauseInterview,
   isProcessing = false,
 }) {
   const [textModeOpen, setTextModeOpen] = useState(false);
@@ -19,7 +36,8 @@ export function CandidateConsole({
   const [notice, setNotice] = useState(null);
 
   const isSpeaking = voiceState === "AI_SPEAKING";
-  const isListening = voiceState === "LISTENING";
+  const isListening = voiceState === "LISTENING" || voiceState === "CANDIDATE_SPEAKING";
+  const isCandidateTalking = voiceState === "CANDIDATE_SPEAKING";
 
   const handleSendText = (e) => {
     e.preventDefault();
@@ -29,14 +47,74 @@ export function CandidateConsole({
     setNotice(null);
   };
 
+  const formattedTimer = `${Math.floor(answerElapsedSeconds / 60)}:${String(
+    answerElapsedSeconds % 60
+  ).padStart(2, "0")}`;
+
   return (
-    <div className="relative flex flex-col gap-3 p-4 sm:p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-card">
+    <div className="relative flex flex-col gap-3 p-4 sm:p-5 rounded-3xl bg-[var(--surface)] border border-[var(--border)] shadow-card">
+      {/* Polite Timeout Prompt (Phase 5: If no response after 20s, offer to repeat or take time) */}
+      <AnimatePresence>
+        {showTimeoutPrompt && isListening && !interimTranscript && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-wrap items-center justify-between gap-3 text-xs"
+          >
+            <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-medium">
+              <HelpCircle size={15} className="shrink-0" />
+              <span>Take your time. Would you like me to repeat the question?</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {onReplayQuestion && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onReplayQuestion}
+                  className="text-xs h-7 gap-1 bg-[var(--surface)]"
+                >
+                  <RotateCcw size={12} /> Repeat Question
+                </Button>
+              )}
+              {onPauseInterview && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onPauseInterview}
+                  className="text-xs h-7 gap-1 bg-[var(--surface)]"
+                >
+                  <Pause size={12} /> Pause
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTextModeOpen(true)}
+                className="text-xs h-7 gap-1 bg-[var(--surface)]"
+              >
+                <MessageSquare size={12} /> Type Instead
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Real-time live speech feedback bar */}
-      <div className="flex items-center justify-between gap-3 min-h-[44px] px-3.5 py-2 rounded-xl bg-[var(--surface-2)]/70 border border-[var(--border)]">
+      <div className="flex items-center justify-between gap-3 min-h-[48px] px-4 py-2.5 rounded-2xl bg-[var(--surface-2)]/80 border border-[var(--border)]">
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <span
             className={`h-2.5 w-2.5 rounded-full shrink-0 ${
-              isListening ? "bg-emerald-500 animate-pulse" : isMuted ? "bg-red-400" : "bg-neutral-400"
+              isCandidateTalking
+                ? "bg-emerald-400 animate-ping"
+                : isListening
+                ? "bg-emerald-500 animate-pulse"
+                : isMuted
+                ? "bg-red-400"
+                : "bg-neutral-400"
             }`}
           />
           <div className="min-w-0 flex-1">
@@ -47,22 +125,32 @@ export function CandidateConsole({
                 </p>
                 {isListening && (
                   <span className="text-[10px] text-[var(--accent-strong)] block font-mono">
-                    ● Listening... pause 3.5s to auto-send, or click &ldquo;Done Speaking / Send&rdquo;
+                    ● Listening... speak freely. Auto-submits on natural completion or click &ldquo;Done Speaking / Send&rdquo;
                   </span>
                 )}
               </div>
             ) : isListening ? (
-              <p className="text-xs sm:text-sm font-medium">
-                {audioLevel > 8 ? (
-                  <span className="text-emerald-500 dark:text-emerald-400 animate-pulse">
-                    ● Hearing your voice... Speak your answer
-                  </span>
-                ) : (
-                  <span className="text-blue-500 dark:text-blue-400">
-                    ● Mic live — Speak naturally
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs sm:text-sm font-medium">
+                  {audioLevel > 8 ? (
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold animate-pulse">
+                      ● Hearing your voice... Speak your answer
+                    </span>
+                  ) : (
+                    <span className="text-[var(--accent-strong)] font-semibold">
+                      ● Your turn — speak now through your microphone
+                    </span>
+                  )}
+                </p>
+                {answerElapsedSeconds > 0 && (
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-mono text-[var(--ink-muted)]">
+                    <Clock size={11} /> {formattedTimer}
+                    {answerElapsedSeconds < 10 && (
+                      <span className="text-[10px] text-amber-600">(10s response window)</span>
+                    )}
                   </span>
                 )}
-              </p>
+              </div>
             ) : isSpeaking ? (
               <p className="text-xs sm:text-sm text-[var(--ink-muted)]">
                 AI Interviewer is speaking aloud. You can interrupt anytime.
@@ -77,32 +165,46 @@ export function CandidateConsole({
 
         {/* Live Audio Waveform */}
         <div className="shrink-0 hidden sm:block">
-          <AudioWaveform audioLevel={audioLevel} isActive={isListening} barCount={14} tone="accent" />
+          <AudioWaveform audioLevel={audioLevel} isActive={isListening} barCount={16} tone="accent" />
         </div>
       </div>
 
       {/* Main Tactile Action Controls */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-        {/* Left: Interruption Button */}
-        <div>
+        {/* Left: Interruption / Pause Button */}
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onInterrupt}
-            className={`gap-1.5 text-xs font-semibold ${
+            className={`gap-1.5 text-xs font-semibold rounded-xl ${
               isSpeaking
-                ? "border-amber-500/50 text-amber-500 hover:bg-amber-500/10 animate-pulse"
+                ? "border-amber-500/50 text-amber-600 hover:bg-amber-500/10 animate-pulse"
                 : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
             }`}
           >
-            <Hand size={15} />
+            <Hand size={14} />
             <span>{isSpeaking ? "Interrupt AI Interviewer" : "Pause / Intervene"}</span>
           </Button>
+
+          {onReplayQuestion && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onReplayQuestion}
+              title="Repeat the current interview question aloud"
+              className="text-xs font-semibold rounded-xl text-[var(--ink-muted)] hover:text-[var(--ink)] gap-1"
+            >
+              <RotateCcw size={13} />
+              <span className="hidden sm:inline">Repeat Question</span>
+            </Button>
+          )}
         </div>
 
         {/* Center: Tactile Microphone & Done Speaking */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           {/* Mute / Unmute Button */}
           <button
             type="button"
@@ -112,7 +214,7 @@ export function CandidateConsole({
               isMuted
                 ? "bg-red-500/10 border-red-500/40 text-red-500 ring-2 ring-red-500/20"
                 : isListening
-                ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-500 ring-4 ring-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+                ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-600 dark:text-emerald-400 ring-4 ring-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
                 : "bg-[var(--surface-2)] border-[var(--border)] text-[var(--ink)] hover:border-[var(--accent)]"
             }`}
           >
@@ -135,7 +237,7 @@ export function CandidateConsole({
                 setNotice("Microphone hasn't caught words yet — please type your response below or speak clearly into your mic.");
               }
             }}
-            className="gap-2 px-5 font-semibold text-xs sm:text-sm shadow-md cursor-pointer"
+            className="gap-2 px-5 font-semibold text-xs sm:text-sm shadow-md cursor-pointer rounded-2xl"
           >
             <Send size={15} />
             <span>{isProcessing ? "Processing Answer..." : "Done Speaking / Send"}</span>
@@ -201,4 +303,3 @@ export function CandidateConsole({
     </div>
   );
 }
-

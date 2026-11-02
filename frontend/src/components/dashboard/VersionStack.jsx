@@ -211,7 +211,7 @@ export function VersionStack({ versions, resumeId, resumeTitle }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => nav("/versions")}
+          onClick={() => nav(resumeId ? `/resumes/${resumeId}?tab=versions` : "/resumes?tab=versions")}
           className="-mr-2"
         >
           View all <ArrowUpRight size={14} />

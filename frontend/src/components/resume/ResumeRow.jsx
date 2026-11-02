@@ -18,7 +18,7 @@ export function ResumeRow({ resume }) {
   return (
     <Card
       onClick={() => nav(`/resumes/${resume._id}`)}
-      className="cursor-pointer flex items-center gap-4"
+      className="cursor-pointer flex items-center gap-4 hover:border-[var(--accent)] transition-all"
     >
       <div className="h-12 w-12 rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)] flex items-center justify-center shrink-0">
         <FileText size={18} />
@@ -33,12 +33,23 @@ export function ResumeRow({ resume }) {
         </div>
       </div>
 
-      <Badge tone="neutral" className="gap-1">
-        <Layers size={11} />
-        {resume.latestVersionNumber || 1} version{(resume.latestVersionNumber || 1) > 1 ? "s" : ""}
-      </Badge>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          nav(`/resumes/${resume._id}?tab=versions`);
+        }}
+        title="View this CV's versions"
+        className="cursor-pointer"
+      >
+        <Badge tone="neutral" className="gap-1 hover:border-[var(--accent)] hover:text-[var(--accent-strong)] transition-colors">
+          <Layers size={11} />
+          {resume.latestVersionNumber || 1} version{(resume.latestVersionNumber || 1) > 1 ? "s" : ""}
+        </Badge>
+      </button>
 
       <button
+        type="button"
         onClick={remove}
         disabled={del.isPending}
         className="h-9 w-9 rounded-full hover:bg-[var(--surface-2)] flex items-center justify-center text-[var(--ink-muted)] hover:text-[var(--danger)] transition-colors"

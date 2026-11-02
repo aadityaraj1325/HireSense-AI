@@ -126,6 +126,36 @@ const detailedReportSchema = new mongoose.Schema(
     { _id: false }
 );
 
+const monitoringEventSchema = new mongoose.Schema(
+    {
+        eventType: {
+            type: String,
+            required: true,
+        },
+        timestamp: { type: Date, default: Date.now },
+        durationSeconds: { type: Number, default: 0 },
+        note: { type: String, default: "" },
+        resolved: { type: Boolean, default: true },
+    },
+    { _id: false }
+);
+
+const sessionMonitoringSchema = new mongoose.Schema(
+    {
+        cameraPermissionGranted: { type: Boolean, default: false },
+        microphonePermissionGranted: { type: Boolean, default: false },
+        cameraUsed: { type: Boolean, default: false },
+        microphoneUsed: { type: Boolean, default: false },
+        facePresencePct: { type: Number, default: 100 },
+        totalFaceAbsentEvents: { type: Number, default: 0 },
+        totalMultipleFacesEvents: { type: Number, default: 0 },
+        totalTabSwitches: { type: Number, default: 0 },
+        events: { type: [monitoringEventSchema], default: [] },
+        observationsSummary: { type: String, default: "" },
+    },
+    { _id: false }
+);
+
 const interviewSessionSchema = new mongoose.Schema(
     {
         userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
@@ -174,7 +204,7 @@ const interviewSessionSchema = new mongoose.Schema(
         questionLimit: { type: Number, min: 1, max: 30, default: 10 },
         status: {
             type: String,
-            enum: ["setup", "active", "completed", "interrupted"],
+            enum: ["setup", "active", "paused", "completed", "interrupted"],
             default: "active",
             index: true,
         },
@@ -202,6 +232,7 @@ const interviewSessionSchema = new mongoose.Schema(
             focusAreas: { type: [String], default: [] },
         },
         detailedReport: { type: detailedReportSchema, default: null },
+        monitoring: { type: sessionMonitoringSchema, default: () => ({}) },
         startedAt: { type: Date, default: Date.now },
         completedAt: Date,
     },

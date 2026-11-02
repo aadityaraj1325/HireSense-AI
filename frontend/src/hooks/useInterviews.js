@@ -119,12 +119,51 @@ export function useFinishStudio() {
   const queryClient = useQueryClient();
   const toast = useToast();
   return useMutation({
-    mutationFn: (id) => interviewsApi.studioFinish(id),
-    onSuccess: (data, id) => {
+    mutationFn: (variables) => {
+      const id = typeof variables === "string" ? variables : variables.id;
+      const payload = typeof variables === "string" ? {} : variables.payload || {};
+      return interviewsApi.studioFinish(id, payload);
+    },
+    onSuccess: (data, variables) => {
+      const id = typeof variables === "string" ? variables : variables.id;
       queryClient.setQueryData(interviewKeys.studio(id), data.session);
       queryClient.invalidateQueries({ queryKey: interviewKeys.list() });
       toast.success("Live Interview Completed", "Comprehensive intelligence report generated.");
     },
     onError: (error) => toast.error("Could not finalize studio session", error?.message),
+  });
+}
+
+export function usePauseStudioSession() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (id) => interviewsApi.pauseSession(id),
+    onSuccess: (data, id) => {
+      queryClient.setQueryData(interviewKeys.studio(id), data.session);
+      toast.info("Interview Paused", "The interview session is temporarily paused.");
+    },
+    onError: (error) => toast.error("Could not pause session", error?.message),
+  });
+}
+
+export function useResumeStudioSession() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (id) => interviewsApi.resumeSession(id),
+    onSuccess: (data, id) => {
+      queryClient.setQueryData(interviewKeys.studio(id), data.session);
+      toast.success("Interview Resumed", "The interview is now live.");
+    },
+    onError: (error) => toast.error("Could not resume session", error?.message),
+  });
+}
+
+export function useRepeatStudioQuestion() {
+  const toast = useToast();
+  return useMutation({
+    mutationFn: (id) => interviewsApi.repeatQuestion(id),
+    onError: (error) => toast.error("Could not request question repeat", error?.message),
   });
 }

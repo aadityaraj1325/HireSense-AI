@@ -5,6 +5,7 @@ import {
   Search,
   LayoutGrid,
   FileText,
+  Target,
   BarChart3,
   Layers,
   History,
@@ -19,8 +20,9 @@ import { useResumesList } from "@/hooks/useResumes";
 const NAV_ITEMS = [
   { id: "nav:dashboard", kind: "nav", label: "Dashboard", hint: "Overview", to: "/dashboard", icon: LayoutGrid },
   { id: "nav:resumes", kind: "nav", label: "Resumes", hint: "Browse & upload", to: "/resumes", icon: FileText },
+  { id: "nav:target", kind: "nav", label: "Target", hint: "Daily planning & productivity workspace", to: "/target", icon: Target },
   { id: "nav:insights", kind: "nav", label: "Insights", hint: "Score trends", to: "/insights", icon: BarChart3 },
-  { id: "nav:versions", kind: "nav", label: "Versions", hint: "Compare V1 / V2 / V3", to: "/versions", icon: Layers },
+  { id: "nav:versions", kind: "nav", label: "CV Versions", hint: "Resumes → Version history", to: "/resumes?tab=versions", icon: Layers },
   { id: "nav:developer-tracker", kind: "nav", label: "Developer Tracker", hint: "Coding & proof-of-work", to: "/developer-tracker", icon: Code2 },
   { id: "nav:gap-intelligence", kind: "nav", label: "AI Gap Intelligence Lab", hint: "Explainable career gaps & skill DNA", to: "/settings/gap-intelligence", icon: BrainCircuit },
   { id: "nav:history", kind: "nav", label: "History", hint: "Settings → Activity history", to: "/settings?tab=history", icon: History },

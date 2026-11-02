@@ -135,6 +135,8 @@ export function useVoiceInterview({
   const [audioLevel, setAudioLevel] = useState(0);
   const [isSupported, setIsSupported] = useState(true);
   const [permissionError, setPermissionError] = useState(null);
+  const [answerElapsedSeconds, setAnswerElapsedSeconds] = useState(0);
+  const [showTimeoutPrompt, setShowTimeoutPrompt] = useState(false);
 
   // Core references
   const voiceStateRef = useRef("INITIALIZING");
@@ -153,6 +155,8 @@ export function useVoiceInterview({
   const silenceTimerRef = useRef(null);
   const safetySpeechTimerRef = useRef(null);
   const speechResumeIntervalRef = useRef(null);
+  const answerTimerIntervalRef = useRef(null);
+  const answerStartTimeRef = useRef(0);
 
   // Voice synthesis stability trackers
   const voicesListRef = useRef([]);
@@ -208,6 +212,10 @@ export function useVoiceInterview({
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current);
       silenceTimerRef.current = null;
+    }
+    if (answerTimerIntervalRef.current) {
+      clearInterval(answerTimerIntervalRef.current);
+      answerTimerIntervalRef.current = null;
     }
     if (recognitionRef.current) {
       try {
@@ -356,6 +364,9 @@ export function useVoiceInterview({
         lastSpokenTranscriptRef.current = combinedText;
         setInterimTranscript(combinedText);
         setAudioLevel(85);
+        setShowTimeoutPrompt(false);
+        setVoiceState("CANDIDATE_SPEAKING");
+        voiceStateRef.current = "CANDIDATE_SPEAKING";
 
         // Reset silence countdown timer
         if (silenceTimerRef.current) {
@@ -363,21 +374,27 @@ export function useVoiceInterview({
           silenceTimerRef.current = null;
         }
 
-        // Auto-submit after 3.5s of continuous silence
+        // Response Rule: Minimum 10-second response window!
+        // Give candidate at least 10 seconds of opportunity from question start.
+        // If candidate speaks, do NOT prematurely cut off on brief pauses.
         if (combinedText.length > 3) {
+          const elapsedMs = Date.now() - (answerStartTimeRef.current || Date.now());
+          const minWindowRemaining = Math.max(0, 10000 - elapsedMs);
+          const computedDelay = Math.max(silenceThresholdMs || 2800, minWindowRemaining + 1500);
+
           silenceTimerRef.current = setTimeout(() => {
             if (
               shouldBeListeningRef.current &&
               !isSubmittingRef.current &&
-              voiceStateRef.current === "LISTENING"
+              (voiceStateRef.current === "LISTENING" || voiceStateRef.current === "CANDIDATE_SPEAKING")
             ) {
               const toSubmit = lastSpokenTranscriptRef.current;
               if (toSubmit && toSubmit.length > 2) {
-                console.log("[LiveVoice] Auto-submitting after pause:", toSubmit);
+                console.log("[LiveVoice] Auto-submitting after minimum window & natural pause:", toSubmit);
                 commitCandidateAnswer(toSubmit);
               }
             }
-          }, silenceThresholdMs);
+          }, computedDelay);
         }
       }
     };
@@ -467,6 +484,21 @@ export function useVoiceInterview({
     accumulatedHistoryRef.current = "";
     lastSpokenTranscriptRef.current = "";
     setInterimTranscript("");
+    setShowTimeoutPrompt(false);
+    setAnswerElapsedSeconds(0);
+    answerStartTimeRef.current = Date.now();
+
+    if (answerTimerIntervalRef.current) {
+      clearInterval(answerTimerIntervalRef.current);
+    }
+    answerTimerIntervalRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - answerStartTimeRef.current) / 1000);
+      setAnswerElapsedSeconds(elapsed);
+      // If 20 seconds pass with no answer recorded, show prompt to offer repeating question
+      if (elapsed >= 20 && !lastSpokenTranscriptRef.current) {
+        setShowTimeoutPrompt(true);
+      }
+    }, 1000);
 
     setVoiceState("LISTENING");
     voiceStateRef.current = "LISTENING";
@@ -801,6 +833,9 @@ export function useVoiceInterview({
     setInterimTranscript,
     isSupported,
     permissionError,
+    answerElapsedSeconds,
+    showTimeoutPrompt,
+    setShowTimeoutPrompt,
     startListening,
     stopListening,
     speakAIResponse,

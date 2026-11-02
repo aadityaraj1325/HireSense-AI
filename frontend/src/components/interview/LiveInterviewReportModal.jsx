@@ -12,6 +12,11 @@ import {
   Download,
   ArrowRight,
   Sparkles,
+  ShieldCheck,
+  Camera,
+  Mic,
+  Activity,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -82,6 +87,7 @@ export function LiveInterviewReportModal({ report, session, onClose, onGoDashboa
             { id: "plan", label: "7-Day & 30-Day Plan", icon: Calendar },
             { id: "projects", label: "Recommended Projects", icon: Code2 },
             { id: "questions", label: "Question Breakdown", icon: BookOpen },
+            { id: "monitoring", label: "Smart Proctoring & Presence", icon: ShieldCheck },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -327,6 +333,99 @@ export function LiveInterviewReportModal({ report, session, onClose, onGoDashboa
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* TAB 5: SMART PROCTORING & VISUAL PRESENCE */}
+          {activeTab === "monitoring" && (
+            <div className="space-y-6">
+              {/* Telemetry Highlight Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] text-center">
+                  <div className="text-xl font-bold font-mono text-emerald-500">
+                    {session?.monitoring?.facePresencePct ?? 100}%
+                  </div>
+                  <div className="text-[11px] text-[var(--ink-muted)] font-medium mt-0.5">
+                    Face Continuity
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] text-center">
+                  <div className="text-xl font-bold font-mono text-[var(--ink)]">
+                    {session?.monitoring?.cameraUsed !== false ? "Active" : "Off"}
+                  </div>
+                  <div className="text-[11px] text-[var(--ink-muted)] font-medium mt-0.5">
+                    Camera Status
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] text-center">
+                  <div className="text-xl font-bold font-mono text-[var(--ink)]">
+                    {session?.monitoring?.totalTabSwitches ?? 0}
+                  </div>
+                  <div className="text-[11px] text-[var(--ink-muted)] font-medium mt-0.5">
+                    Tab Focus Shifts
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] text-center">
+                  <div className="text-xl font-bold font-mono text-[var(--ink)]">
+                    {session?.monitoring?.totalFaceAbsentEvents ?? 0}
+                  </div>
+                  <div className="text-[11px] text-[var(--ink-muted)] font-medium mt-0.5">
+                    Brief Absences
+                  </div>
+                </div>
+              </div>
+
+              {/* Official Privacy & Non-Accusatory Disclaimer */}
+              <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400 space-y-1.5 leading-relaxed">
+                <div className="font-bold flex items-center gap-1.5 text-[var(--ink)]">
+                  <ShieldCheck size={16} className="text-blue-500" />
+                  <span>Automated Visual Presence Notice</span>
+                </div>
+                <p className="text-[11px] text-[var(--ink-muted)]">
+                  Visual monitoring events are automated browser observations (such as natural head movement, note-taking, or tab focus shifts). They are provided for transparency and candidate reflection, are not evidence of misconduct, and are kept completely decoupled from your technical and architectural evaluation scores.
+                </p>
+              </div>
+
+              {/* Event Activity Log */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-[var(--ink)] flex items-center gap-2">
+                  <Activity size={16} className="text-[var(--accent)]" />
+                  <span>Session Telemetry &amp; Event Timeline</span>
+                </h4>
+
+                {(session?.monitoring?.events || []).length === 0 ? (
+                  <div className="p-6 rounded-2xl bg-[var(--surface-2)] text-center text-xs text-[var(--ink-muted)] border border-[var(--border)]">
+                    No suspicious or irregular visual events were detected. Presence continuity was nominal throughout.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {(session?.monitoring?.events || []).map((evt, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-start justify-between p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] text-xs"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+                          <div>
+                            <span className="font-semibold text-[var(--ink)] capitalize">
+                              {(evt.eventType || "Event").replace(/_/g, " ")}
+                            </span>
+                            <p className="text-[11px] text-[var(--ink-muted)] mt-0.5">
+                              {evt.note}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-mono text-[var(--ink-muted)] shrink-0">
+                          {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

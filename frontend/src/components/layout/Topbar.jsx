@@ -5,7 +5,6 @@ import {
   ChevronDown,
   FileText,
   History,
-  Layers,
   LayoutGrid,
   LogOut,
   Menu,
@@ -15,26 +14,30 @@ import {
   Moon,
   X,
   Code2,
+  BrainCircuit,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "@/components/ui/IconButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
+import { useLiveInterview } from "@/context/LiveInterviewContext";
 import { NotificationsPopover } from "./NotificationsPopover";
 import AILogo from "./AILogo";
 
 const NAV = [
   { to: "/dashboard", label: "Overview", icon: LayoutGrid },
   { to: "/resumes", label: "Resumes", icon: FileText },
-  { to: "/insights", label: "Insights", icon: BarChart3 },
-  { to: "/versions", label: "Versions", icon: Layers },
+  { to: "/target", label: "Target", icon: Target },
+  { to: "/career-intelligence", label: "Intelligence", icon: BrainCircuit },
   { to: "/developer-tracker", label: "Dev Tracker", icon: Code2 },
 ];
 
 export function Topbar({ onOpenPalette }) {
   const { theme, toggle } = useTheme();
   const { user, logout } = useAuth();
+  const { activeSession, hasActiveSession, formattedElapsed } = useLiveInterview();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -84,6 +87,19 @@ export function Topbar({ onOpenPalette }) {
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {hasActiveSession && (
+            <button
+              type="button"
+              onClick={() => navigate(`/interview/live/${activeSession.sessionId}`)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs font-semibold hover:bg-rose-500/20 transition-all cursor-pointer shadow-sm animate-pulse"
+              title="Click to return to active live interview"
+            >
+              <span className="h-2 w-2 rounded-full bg-rose-500" />
+              <span className="hidden sm:inline">LIVE Session</span>
+              <span className="font-mono text-[11px] text-[var(--ink)]">({formattedElapsed})</span>
+            </button>
+          )}
+
           <button type="button" onClick={onOpenPalette} className="hidden h-10 w-[190px] items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-left transition-colors hover:border-[var(--accent)]/40 2xl:flex">
             <Search size={14} className="text-[var(--ink-muted)]" />
             <span className="flex-1 text-xs text-[var(--ink-muted)] truncate">Search your workspace</span>
